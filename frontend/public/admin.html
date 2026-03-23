@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EZ Coworker — Admin Command Center</title>
+<link rel="icon" type="image/png" href="image.png">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #060c18; --panel: #0b1427; --surface: #111e36;
+  --surface2: #162040; --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12); --text: #e8eeff;
+  --muted: #6b7a99; --dim: #2d3a55;
+  --blue: #3b82f6; --indigo: #6366f1; --teal: #2dd4bf;
+  --green: #22c55e; --amber: #f59e0b; --red: #ef4444;
+  --purple: #a855f7; --orange: #f97316;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+h1,h2,h3,.font-display{font-family:'Outfit',sans-serif}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1e2d4a;border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:#2d3f60}
+
+/* Layout */
+#app{display:flex;flex:1;overflow:hidden}
+#sidebar{width:220px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#topbar{height:52px;flex-shrink:0;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px}
+#content{flex:1;overflow-y:auto;padding:20px}
+
+/* Sidebar nav */
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:8px;margin:2px 8px;cursor:pointer;font-size:0.82rem;font-weight:500;color:var(--muted);transition:all 0.15s;border:1px solid transparent}
+.nav-item:hover{background:var(--surface);color:var(--text)}
+.nav-item.active{background:rgba(59,130,246,0.12);color:var(--blue);border-color:rgba(59,130,246,0.2)}
+.nav-item svg{width:15px;height:15px;flex-shrink:0}
+.nav-section{font-size:0.62rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--dim);padding:14px 18px 4px}
+
+/* Cards */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.card-header{padding:14px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card-title{font-size:0.82rem;font-weight:600;color:var(--text);font-family:'Outfit',sans-serif}
+.card-body{padding:16px}
+
+/* KPI tiles */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:6px;transition:border-color 0.2s}
+.kpi:hover{border-color:var(--border2)}
+.kpi-label{font-size:0.68rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
+.kpi-value{font-size:1.7rem;font-weight:700;font-family:'Outfit',sans-serif;line-height:1;color:var(--text)}
+.kpi-sub{font-size:0.7rem;color:var(--muted)}
+.kpi-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:2px}
+
+/* Tables */
+.data-table{width:100%;border-collapse:collapse;font-size:0.78rem}
+.data-table th{padding:8px 12px;text-align:left;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.data-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tbody tr{cursor:pointer;transition:background 0.1s}
+.data-table tbody tr:hover{background:rgba(255,255,255,0.03)}
+.data-table tbody tr.selected{background:rgba(59,130,246,0.08)}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:5px;font-size:0.65rem;font-weight:600;white-space:nowrap}
+.badge-blue{background:#0d2147;color:#60a5fa;border:1px solid #1e3a8a}
+.badge-green{background:#052e16;color:#4ade80;border:1px solid #166534}
+.badge-amber{background:#1c1300;color:#fbbf24;border:1px solid #92400e}
+.badge-red{background:#1a0505;color:#f87171;border:1px solid #7f1d1d}
+.badge-purple{background:#1a0a2e;color:#c084fc;border:1px solid #7c3aed}
+.badge-teal{background:#021a18;color:#2dd4bf;border:1px solid #0d9488}
+.badge-gray{background:#111827;color:#9ca3af;border:1px solid #374151}
+
+/* Provider colors */
+.prov-anthropic{color:#c084fc} .prov-openai{color:#4ade80}
+.prov-google{color:#60a5fa} .prov-groq{color:#fbbf24}
+.prov-openrouter{color:#fb923c} .prov-ollama{color:#9ca3af}
+
+/* Charts */
+.chart-wrap{position:relative;width:100%}
+
+/* Range selector */
+.range-btn{padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:0.72rem;cursor:pointer;transition:all 0.15s}
+.range-btn:hover,.range-btn.active{background:rgba(59,130,246,0.12);color:var(--blue);border-color:rgba(59,130,246,0.3)}
+
+/* Drill-down panel */
+#drill-panel{position:fixed;top:0;right:0;bottom:0;width:520px;background:var(--panel);border-left:1px solid var(--border2);z-index:100;display:flex;flex-direction:column;transform:translateX(100%);transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);box-shadow:-8px 0 32px rgba(0,0,0,0.4)}
+#drill-panel.open{transform:translateX(0)}
+#drill-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99;display:none}
+#drill-overlay.open{display:block}
+.drill-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.drill-body{flex:1;overflow-y:auto;padding:16px 20px}
+
+/* Tabs */
+.tab-bar{display:flex;gap:2px;background:var(--surface);border-radius:8px;padding:3px}
+.tab{padding:5px 14px;border-radius:6px;font-size:0.76rem;font-weight:500;cursor:pointer;color:var(--muted);transition:all 0.15s;white-space:nowrap}
+.tab.active{background:var(--panel);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.3)}
+
+/* Progress bar */
+.progress-track{height:5px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;transition:width 0.4s ease}
+
+/* Sparkline */
+.sparkline{height:32px;display:flex;align-items:flex-end;gap:2px}
+.spark-bar{flex:1;border-radius:2px 2px 0 0;min-height:2px;transition:height 0.3s}
+
+/* Auth screen */
+#auth-screen{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;align-items:center;justify-content:center}
+.auth-box{background:var(--panel);border:1px solid var(--border2);border-radius:16px;padding:32px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+
+/* Input */
+.input{width:100%;padding:8px 12px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:0.85rem;outline:none;transition:border-color 0.15s}
+.input:focus{border-color:var(--blue)}
+.btn{padding:9px 20px;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;border:none;transition:all 0.15s}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:#2563eb}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed}
+
+/* Anim */
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp 0.25s ease-out both}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:16px;height:16px;border:2px solid var(--surface2);border-top-color:var(--blue);border-radius:50%;animation:spin 0.7s linear infinite}
+
+/* Tooltip */
+[title]{cursor:help}
+
+/* Responsive grid */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+@media(max-width:1200px){.grid-3{grid-template-columns:1fr 1fr}}
+@media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+/* Section heading */
+.section-heading{font-size:0.7rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;margin-top:16px}
+.section-heading:first-child{margin-top:0}
+</style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div class="auth-box fade-up">
+    <div class="flex items-center gap-3 mb-6">
+      <div style="width:36px;height:36px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+        <svg style="width:18px;height:18px;color:#818cf8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 style="font-size:1.1rem;font-weight:700;color:var(--text);">Admin Command Center</h1>
+        <p style="font-size:0.72rem;color:var(--muted);">EZ Coworker — Restricted Access</p>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <input id="admin-email" type="email" placeholder="Admin email" class="input" onkeydown="if(event.key==='Enter')adminLogin()">
+      <input id="admin-password" type="password" placeholder="Password" class="input" onkeydown="if(event.key==='Enter')adminLogin()">
+      <button id="admin-login-btn" class="btn btn-primary" onclick="adminLogin()">Sign In as Admin</button>
+      <p id="auth-error" style="display:none;font-size:0.75rem;color:#f87171;text-align:center;"></p>
+    </div>
+    <div style="margin-top:16px;padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;">
+      <p style="font-size:0.7rem;color:#fbbf24;font-weight:500;margin-bottom:4px;">First-time setup?</p>
+      <p style="font-size:0.67rem;color:var(--muted);line-height:1.5;">Use <code style="color:#fbbf24">POST /api/admin/setup</code> with your <code style="color:#fbbf24">ADMIN_SETUP_KEY</code> to create an admin account.</p>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none;">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div style="padding:14px 16px 10px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <img src="image.png" style="width:22px;height:22px;border-radius:5px;object-fit:contain;" alt="">
+        <div>
+          <div style="font-size:0.8rem;font-weight:700;color:var(--text);font-family:'Outfit',sans-serif;">EZ Coworker</div>
+          <div style="font-size:0.6rem;color:var(--muted);letter-spacing:0.05em;text-transform:uppercase;">Admin Console</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:6px 0;">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" data-view="overview" onclick="switchView('overview',this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" data-view="activity" onclick="switchView('activity',this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>
+        Activity
+      </div>
+
+      <div class="nav-section">Users &amp; Usage</div>
+      <div class="nav-item" data-view="users" onclick="switchView('users',this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg>
+        Users
+      </div>
+      <div class="nav-item" data-view="conversations" onclick="switchView('conversations',this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg>
+        Conversations
+      </div>
+
+      <div class="nav-section">Models &amp; AI</div>
+      <div class="nav-item" data-view="models" onclick="switchView('models',this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/></svg>
+        Models
+      </div>
+
+
+      <div class="nav-section">Storage &amp; Skills</div>
+      <div class="nav-item" data-view="storage" onclick="switchView('storage',this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/></svg>
+        Storage
+      </div>
+      <div class="nav-item" data-view="skills" onclick="switchView('skills',this)">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Skills
+      </div>
+
+
+
+
+      <div class="nav-section">Infrastructure</div>
+
+
+    </div>
+
+    <div style="padding:10px 8px;border-top:1px solid var(--border);">
+      <div class="nav-item" onclick="adminLogout()" style="color:#f87171">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:15px;height:15px"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>
+        Sign Out
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <!-- Topbar -->
+    <div id="topbar">
+      <div style="flex:1;">
+        <span id="view-title" style="font-size:1rem;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text);">Dashboard</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div id="last-refresh" style="font-size:0.68rem;color:var(--muted);"></div>
+        <button onclick="refreshCurrent()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-size:0.75rem;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all 0.15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">
+          <svg id="refresh-icon" style="width:13px;height:13px" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+          Refresh
+        </button>
+        <div style="font-size:0.72rem;color:var(--muted);padding:4px 10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:6px;">
+          Admin: <span id="admin-email-display" style="color:#818cf8;font-weight:600;"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="content">
+      <div id="loading-overlay" style="display:flex;align-items:center;justify-content:center;height:200px;gap:10px">
+        <div class="spinner"></div>
+        <span style="font-size:0.85rem;color:var(--muted)">Loading…</span>
+      </div>
+      <div id="view-container" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DRILL-DOWN OVERLAY + PANEL -->
+<div id="drill-overlay" onclick="closeDrill()"></div>
+<div id="drill-panel">
+  <div class="drill-header">
+    <button onclick="closeDrill()" style="width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;">
+      <svg style="width:14px;height:14px" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+    <div style="flex:1">
+      <div id="drill-title" style="font-size:0.9rem;font-weight:700;font-family:'Outfit',sans-serif;color:var(--text);">Details</div>
+      <div id="drill-subtitle" style="font-size:0.7rem;color:var(--muted);"></div>
+    </div>
+  </div>
+  <div class="drill-body" id="drill-body">
+    <div style="display:flex;align-items:center;justify-content:center;height:200px;gap:8px">
+      <div class="spinner"></div><span style="color:var(--muted);font-size:0.82rem">Loading…</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:5000/api';
+let adminToken = localStorage.getItem('ez_admin_token');
+let adminEmail = localStorage.getItem('ez_admin_email');
+let currentView = 'overview';
+let chartInstances = {};
+let activityDays = 30;
+
+// ─── UTILS ────────────────────────────────────────────────
+function fmtNum(n){if(!n)return'0';n=+n;if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return Math.round(n).toLocaleString()}
+function fmtBytes(b){b=+b||0;if(b>=1073741824)return(b/1073741824).toFixed(2)+' GB';if(b>=1048576)return(b/1048576).toFixed(1)+' MB';if(b>=1024)return(b/1024).toFixed(1)+' KB';return b+' B'}
+function fmtSecs(s){s=+s||0;if(s>=60)return Math.floor(s/60)+'m '+Math.round(s%60)+'s';return s.toFixed(1)+'s'}
+function fmtDate(d){return d?new Date(d).toLocaleDateString():'—'}
+function fmtDateTime(d){if(!d)return'—';const dt=new Date(d);return dt.toLocaleDateString()+' '+dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}
+function relTime(d){if(!d)return'—';const m=Math.floor((Date.now()-new Date(d))/60000);if(m<1)return'just now';if(m<60)return m+'m ago';const h=Math.floor(m/60);if(h<24)return h+'h ago';return Math.floor(h/24)+'d ago'}
+function escHtml(s){const d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML}
+function provColor(p){const m={anthropic:'purple',openai:'green',google:'blue',groq:'amber',openrouter:'amber',ollama:'gray'};return m[(p||'').toLowerCase()]||'gray'}
+
+async function apiFetch(path, opts={}) {
+  const res = await fetch(API+path, {
+    ...opts,
+    headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+adminToken, ...(opts.headers||{}) }
+  });
+  if (res.status === 401 || res.status === 403) { adminLogout(); throw new Error('Unauthorized'); }
+  return res;
+}
+
+function destroyChart(id){if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id]}}
+
+function makeChart(id, config) {
+  destroyChart(id);
+  const ctx = document.getElementById(id)?.getContext('2d');
+  if (!ctx) return;
+  chartInstances[id] = new Chart(ctx, config);
+  return chartInstances[id];
+}
+
+const CHART_DEFAULTS = {
+  color: '#e8eeff',
+  grid: 'rgba(255,255,255,0.05)',
+  font: "'Inter', system-ui, sans-serif"
+};
+
+function baseLineConfig(labels, datasets) {
+  return {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#6b7a99', font: { size: 11, family: CHART_DEFAULTS.font }, boxWidth: 12, padding: 16 } },
+        tooltip: { backgroundColor: '#0b1427', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, titleColor: '#e8eeff', bodyColor: '#6b7a99', padding: 10 }
+      },
+      scales: {
+        x: { ticks: { color: '#6b7a99', font: { size: 10 } }, grid: { color: CHART_DEFAULTS.grid } },
+        y: { ticks: { color: '#6b7a99', font: { size: 10 } }, grid: { color: CHART_DEFAULTS.grid }, beginAtZero: true }
+      }
+    }
+  };
+}
+
+// ─── AUTH ─────────────────────────────────────────────────
+async function adminLogin() {
+  const email = document.getElementById('admin-email').value.trim();
+  const password = document.getElementById('admin-password').value;
+  const btn = document.getElementById('admin-login-btn');
+  const err = document.getElementById('auth-error');
+  if (!email || !password) { err.textContent='Please fill in all fields.'; err.style.display='block'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const res = await fetch(API+'/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password}) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error||'Login failed');
+    adminToken = data.token; adminEmail = data.email;
+    localStorage.setItem('ez_admin_token', adminToken);
+    localStorage.setItem('ez_admin_email', adminEmail);
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('admin-email-display').textContent = adminEmail;
+    switchView('overview', document.querySelector('.nav-item[data-view="overview"]'));
+  } catch(e) {
+    err.textContent = e.message; err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Sign In as Admin';
+  }
+}
+
+function adminLogout() {
+  localStorage.removeItem('ez_admin_token'); localStorage.removeItem('ez_admin_email');
+  location.reload();
+}
+
+function init() {
+  if (adminToken) {
+    document.getElementById('auth-screen').style.display = 'none';
+    applyAdminTier();
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('admin-email-display').textContent = adminEmail || '';
+    switchView('overview', document.querySelector('.nav-item[data-view="overview"]'));
+  }
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────
+function switchView(view, el) {
+  currentView = view;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const titles = { overview:'Dashboard', activity:'Activity & Trends', users:'Users', conversations:'Conversations', models:'Models & Token Usage', performance:'Response Performance', storage:'Storage', skills:'Skills Usage', agentteams:'Agent Team Usage', infrastructure:'Docker & Concurrency', errorrates:'Error Rates' };
+  document.getElementById('view-title').textContent = titles[view] || view;
+  loadView(view);
+}
+
+function refreshCurrent() {
+  const icon = document.getElementById('refresh-icon');
+  icon.style.animation = 'spin 0.7s linear infinite';
+  loadView(currentView).finally(() => { icon.style.animation = ''; });
+}
+
+async function loadView(view) {
+  showLoading();
+  try {
+    if (view === 'overview') await renderOverview();
+    else if (view === 'activity') await renderActivity();
+    else if (view === 'users') await renderUsers();
+    else if (view === 'conversations') await renderConversations();
+    else if (view === 'models') await renderModels();
+    else if (view === 'performance') await renderPerformance();
+    else if (view === 'storage') await renderStorage();
+    else if (view === 'skills') await renderSkills();
+    else if (view === 'agentteams') await renderAgentTeams();
+    else if (view === 'infrastructure') await renderInfrastructure();
+    else if (view === 'errorrates') await renderErrorRates();
+    document.getElementById('last-refresh').textContent = 'Refreshed '+new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+  } catch(e) { showError(e.message); }
+}
+
+function showLoading() {
+  document.getElementById('loading-overlay').style.display = 'flex';
+  document.getElementById('view-container').style.display = 'none';
+}
+
+function showContent(html) {
+  const vc = document.getElementById('view-container');
+  vc.innerHTML = html;
+  vc.style.display = 'block';
+  document.getElementById('loading-overlay').style.display = 'none';
+}
+
+function showError(msg) {
+  showContent(`<div style="text-align:center;padding:40px;color:#f87171;font-size:0.85rem;">Error: ${escHtml(msg)}</div>`);
+}
+
+// ─── OVERVIEW ─────────────────────────────────────────────
+async function renderOverview() {
+  const [kpis, activity] = await Promise.all([
+    apiFetch('/admin/overview').then(r=>r.json()),
+    apiFetch('/admin/activity/daily?days=14').then(r=>r.json())
+  ]);
+
+  showContent(`
+    <div class="fade-up">
+      <div class="kpi-grid">
+        ${kpiTile('Total Users', fmtNum(kpis.total_users), 'Active accounts', '#3b82f6')}
+        ${kpiTile('Conversations', fmtNum(kpis.total_conversations), fmtNum(kpis.active_users_24h)+' users active 24h', '#6366f1')}
+        ${kpiTile('Total Messages', fmtNum(kpis.total_messages), fmtNum(kpis.assistant_messages)+' assistant replies', '#2dd4bf')}
+        ${kpiTile('Total Tokens', fmtNum(kpis.total_tokens), fmtNum(kpis.total_input_tokens)+'↑ / '+fmtNum(kpis.total_output_tokens)+'↓', '#a855f7')}
+        ${kpiTile('Avg Response', fmtSecs(kpis.avg_response_seconds), fmtSecs(kpis.total_response_seconds)+' total', '#f59e0b')}
+        ${kpiTile('Files Tracked', fmtNum(kpis.total_files), fmtBytes(+kpis.total_input_bytes + +kpis.total_output_bytes)+' total', '#22c55e')}
+        ${kpiTile('Shared Chats', fmtNum(kpis.total_shares), 'Public share links', '#f97316')}
+        ${kpiTile('Active (7d)', fmtNum(kpis.active_users_7d), 'of '+fmtNum(kpis.total_users)+' users', '#ef4444')}
+      </div>
+
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Messages per Day (14 days)</span>
+          </div>
+          <div class="card-body"><div class="chart-wrap" style="height:180px"><canvas id="chart-overview-msgs"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Tokens per Day (14 days)</span>
+          </div>
+          <div class="card-body"><div class="chart-wrap" style="height:180px"><canvas id="chart-overview-tokens"></canvas></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Platform Health</span></div>
+        <div class="card-body">
+          <div class="grid-3">
+            ${healthBar('Input Tokens', kpis.total_input_tokens, +kpis.total_tokens, '#6366f1')}
+            ${healthBar('Output Tokens', kpis.total_output_tokens, +kpis.total_tokens, '#2dd4bf')}
+            ${healthBar('Input Storage', kpis.total_input_bytes, +kpis.total_input_bytes + +kpis.total_output_bytes, '#3b82f6', fmtBytes)}
+            ${healthBar('Output Storage', kpis.total_output_bytes, +kpis.total_input_bytes + +kpis.total_output_bytes, '#22c55e', fmtBytes)}
+            ${healthBar('Active Users (24h)', kpis.active_users_24h, kpis.total_users, '#f59e0b')}
+            ${healthBar('Active Users (7d)', kpis.active_users_7d, kpis.total_users, '#f97316')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const labels = activity.map(r => {
+    const d = new Date(r.date); return (d.getMonth()+1)+'/'+d.getDate();
+  });
+  makeChart('chart-overview-msgs', baseLineConfig(labels, [{
+    label: 'Messages', data: activity.map(r=>+r.messages),
+    borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', tension: 0.4, fill: true, pointRadius: 3
+  }]));
+  makeChart('chart-overview-tokens', baseLineConfig(labels, [{
+    label: 'Tokens', data: activity.map(r=>+r.tokens),
+    borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', tension: 0.4, fill: true, pointRadius: 3
+  }]));
+}
+
+function kpiTile(label, value, sub, color) {
+  return `<div class="kpi" style="border-left:3px solid ${color}22">
+    <div class="kpi-label">${label}</div>
+    <div class="kpi-value" style="color:${color}">${value}</div>
+    <div class="kpi-sub">${sub}</div>
+  </div>`;
+}
+
+function healthBar(label, value, total, color, fmt=fmtNum) {
+  const pct = total > 0 ? Math.round((+value / +total) * 100) : 0;
+  return `<div style="margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span style="font-size:0.72rem;color:var(--muted)">${label}</span>
+      <span style="font-size:0.72rem;color:var(--text);font-weight:600">${fmt(value)} <span style="color:var(--muted);font-weight:400">(${pct}%)</span></span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div>
+  </div>`;
+}
+
+// ─── ACTIVITY ─────────────────────────────────────────────
+async function renderActivity() {
+  const rows = await apiFetch('/admin/activity/daily?days='+activityDays).then(r=>r.json());
+  showContent(`
+    <div class="fade-up">
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:14px">
+        ${[7,14,30,60,90].map(d=>`<button class="range-btn ${activityDays===d?'active':''}" onclick="setActivityDays(${d})">${d}d</button>`).join('')}
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><span class="card-title">Daily Messages & New Users</span></div>
+        <div class="card-body"><div class="chart-wrap" style="height:220px"><canvas id="chart-act-msgs"></canvas></div></div>
+      </div>
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Token Usage</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:180px"><canvas id="chart-act-tokens"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Avg Response Time (s)</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:180px"><canvas id="chart-act-secs"></canvas></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Data Table</span></div>
+        <div class="card-body" style="padding:0;overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Messages</th><th>Tokens</th><th>Avg Resp</th><th>New Users</th><th>New Convs</th></tr></thead>
+            <tbody>${rows.slice().reverse().map(r=>`<tr>
+              <td style="color:var(--muted)">${fmtDate(r.date)}</td>
+              <td style="font-weight:600">${fmtNum(r.messages)}</td>
+              <td>${fmtNum(r.tokens)}</td>
+              <td>${r.avg_response_secs>0?fmtSecs(r.avg_response_secs):'—'}</td>
+              <td style="color:#4ade80">${r.new_users>0?'+'+r.new_users:'0'}</td>
+              <td>${fmtNum(r.new_conversations)}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const labels = rows.map(r => { const d=new Date(r.date); return (d.getMonth()+1)+'/'+d.getDate(); });
+  makeChart('chart-act-msgs', baseLineConfig(labels, [
+    { label:'Messages', data:rows.map(r=>+r.messages), borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.1)', tension:0.4, fill:true, yAxisID:'y', pointRadius:2 },
+    { label:'New Users', data:rows.map(r=>+r.new_users), borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,0.1)', tension:0.4, fill:false, yAxisID:'y1', pointRadius:3, borderDash:[4,3] }
+  ], true));
+  makeChart('chart-act-tokens', baseLineConfig(labels, [
+    { label:'Tokens', data:rows.map(r=>+r.tokens), borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,0.08)', tension:0.4, fill:true, pointRadius:2 }
+  ]));
+  makeChart('chart-act-secs', baseLineConfig(labels, [
+    { label:'Avg (s)', data:rows.map(r=>r.avg_response_secs>0?(+r.avg_response_secs).toFixed(2):null), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.08)', tension:0.4, fill:true, pointRadius:2, spanGaps:true }
+  ]));
+}
+
+function setActivityDays(d) { activityDays = d; renderActivity(); }
+
+// Override baseLineConfig for dual-axis
+function baseLineConfig(labels, datasets, dualAxis=false) {
+  const cfg = {
+    type:'line', data:{labels, datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:{duration:400},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#6b7a99',font:{size:11,family:CHART_DEFAULTS.font},boxWidth:12,padding:16}},
+        tooltip:{backgroundColor:'#0b1427',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#e8eeff',bodyColor:'#6b7a99',padding:10}
+      },
+      scales:{
+        x:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:CHART_DEFAULTS.grid}},
+        y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:CHART_DEFAULTS.grid},beginAtZero:true}
+      }
+    }
+  };
+  if (dualAxis) {
+    cfg.options.scales.y1 = {position:'right',ticks:{color:'#22c55e',font:{size:10}},grid:{display:false},beginAtZero:true};
+  }
+  return cfg;
+}
+
+// ─── USERS ────────────────────────────────────────────────
+let userSort = 'last_active';
+async function renderUsers() {
+  const data = await apiFetch('/admin/users?sort='+userSort+'&limit=100').then(r=>r.json());
+  const users = data.users || [];
+  showContent(`
+    <div class="fade-up">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <span style="font-size:0.8rem;color:var(--muted)">${fmtNum(data.total)} total users</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:0.72rem;color:var(--muted)">Sort by:</span>
+          ${['last_active','total_messages','total_tokens','total_conversations','created_at'].map(s=>
+            `<button class="range-btn ${userSort===s?'active':''}" onclick="setUserSort('${s}')">${s.replace('total_','').replace('_',' ')}</button>`
+          ).join('')}
+        </div>
+      </div>
+      <div class="card">
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr>
+              <th>User</th><th>Joined</th><th>Convs</th><th>Messages</th><th>Tokens</th>
+              <th>Avg Resp</th><th>Model</th><th>Files</th><th>Storage</th><th>Last Active</th>
+            </tr></thead>
+            <tbody>
+            ${users.map(u=>`<tr onclick="openUserDrill(${u.id},'${escHtml(u.email)}')">
+              <td>
+                <div style="font-weight:600;font-size:0.8rem;color:var(--text)">${escHtml(u.email)}</div>
+                ${u.auto_select?'<span class="badge badge-purple" style="font-size:0.58rem;margin-top:2px">Auto</span>':''}
+              </td>
+              <td style="color:var(--muted)">${fmtDate(u.created_at)}</td>
+              <td style="font-weight:600">${fmtNum(u.total_conversations)}</td>
+              <td>${fmtNum(u.total_messages)}</td>
+              <td>${fmtNum(u.total_tokens)}</td>
+              <td style="color:${+u.avg_response_secs>30?'#f87171':+u.avg_response_secs>15?'#fbbf24':'#4ade80'}">${u.avg_response_secs>0?fmtSecs(u.avg_response_secs):'—'}</td>
+              <td>
+                ${u.current_model?`<div style="font-size:0.72rem;color:var(--text)">${escHtml(u.current_model)}</div>
+                  <span class="badge badge-${provColor(u.current_provider)}" style="font-size:0.58rem">${escHtml(u.current_provider||'')}</span>`:'<span style="color:var(--muted)">—</span>'}
+              </td>
+              <td>${fmtNum(u.total_files)}</td>
+              <td style="font-size:0.75rem">${fmtBytes(+u.input_bytes + +u.output_bytes)}</td>
+              <td style="color:var(--muted);font-size:0.75rem">${relTime(u.last_active)}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function setUserSort(s) { userSort = s; renderUsers(); }
+
+// ─── USER DRILL-DOWN ──────────────────────────────────────
+async function openUserDrill(userId, email) {
+  document.getElementById('drill-title').textContent = email;
+  document.getElementById('drill-subtitle').textContent = 'User #'+userId;
+  document.getElementById('drill-body').innerHTML = '<div style="display:flex;align-items:center;gap:8px;height:200px;justify-content:center"><div class="spinner"></div><span style="color:var(--muted);font-size:0.82rem">Loading…</span></div>';
+  openDrill();
+  const data = await apiFetch('/admin/users/'+userId).then(r=>r.json());
+  renderUserDrill(data);
+}
+
+function renderUserDrill(d) {
+  const { user, conversations, modelUsage, daily, files, skills } = d;
+  const totalTokens = modelUsage.reduce((s,m)=>s+(+m.tokens||0),0);
+
+  document.getElementById('drill-body').innerHTML = `
+    <!-- KPIs -->
+    <div class="grid-3" style="margin-bottom:16px">
+      ${miniKpi('Conversations', conversations.length, '#6366f1')}
+      ${miniKpi('Total Tokens', fmtNum(totalTokens), '#a855f7')}
+      ${miniKpi('Files', files.reduce((s,f)=>s+(+f.file_count),0), '#22c55e')}
+    </div>
+
+    <!-- Model usage -->
+    <div class="section-heading">Model Usage</div>
+    ${modelUsage.length ? modelUsage.map(m=>`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:var(--surface);border-radius:7px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.75rem;font-weight:600;color:var(--text)">${escHtml(m.model)}</div>
+          <span class="badge badge-${provColor(m.provider)}" style="font-size:0.58rem">${escHtml(m.provider)}</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:0.75rem;font-weight:600">${fmtNum(m.cnt)} msgs</div>
+          <div style="font-size:0.68rem;color:var(--muted)">${fmtNum(m.tokens)} tokens</div>
+        </div>
+      </div>`).join('') : '<p style="color:var(--muted);font-size:0.78rem">No model data yet</p>'}
+
+    <!-- File storage -->
+    <div class="section-heading">Storage</div>
+    ${files.length ? files.map(f=>`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span class="badge badge-${f.folder==='input'?'blue':'green'}">${f.folder}</span>
+        <span style="font-size:0.75rem;flex:1">${fmtNum(f.file_count)} files</span>
+        <span style="font-size:0.75rem;font-weight:600">${fmtBytes(f.total_bytes)}</span>
+      </div>`).join('') : '<p style="color:var(--muted);font-size:0.78rem">No files tracked</p>'}
+
+    <!-- Skills -->
+    ${skills.length ? `<div class="section-heading">Active Skills (${skills.length})</div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
+      ${skills.map(s=>`<span class="badge badge-teal">${escHtml(s.skill_name)}</span>`).join('')}
+    </div>` : ''}
+
+    <!-- Recent conversations -->
+    <div class="section-heading">Recent Conversations</div>
+    ${conversations.slice(0,15).map(c=>`
+      <div style="padding:8px 10px;background:var(--surface);border-radius:7px;margin-bottom:5px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+          <span style="font-size:0.75rem;font-weight:600;flex:1;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(c.title)}</span>
+          ${c.is_shared?'<span class="badge badge-amber" style="font-size:0.58rem">Shared</span>':''}
+        </div>
+        <div style="display:flex;gap:12px">
+          <span style="font-size:0.68rem;color:var(--muted)">${fmtNum(c.message_count)} msgs</span>
+          <span style="font-size:0.68rem;color:var(--muted)">${fmtNum(c.total_tokens)} tokens</span>
+          <span style="font-size:0.68rem;color:var(--muted)">${relTime(c.last_message_at)}</span>
+        </div>
+      </div>`).join('')}
+  `;
+}
+
+function miniKpi(label, value, color) {
+  return `<div style="background:var(--surface);border-radius:8px;padding:10px;border-left:3px solid ${color}33">
+    <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px">${label}</div>
+    <div style="font-size:1.1rem;font-weight:700;color:${color};font-family:'Outfit',sans-serif">${value}</div>
+  </div>`;
+}
+
+// ─── CONVERSATIONS ────────────────────────────────────────
+async function renderConversations() {
+  const [recent, overview] = await Promise.all([
+    apiFetch('/admin/activity/recent').then(r=>r.json()),
+    apiFetch('/admin/overview').then(r=>r.json())
+  ]);
+  showContent(`
+    <div class="fade-up">
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+        ${kpiTile('Total Conversations', fmtNum(overview.total_conversations), '', '#6366f1')}
+        ${kpiTile('Total Messages', fmtNum(overview.total_messages), fmtNum(overview.user_messages)+' user / '+fmtNum(overview.assistant_messages)+' agent', '#2dd4bf')}
+        ${kpiTile('Shared Conversations', fmtNum(overview.total_shares), 'public share links active', '#f97316')}
+        ${kpiTile('Avg Response', fmtSecs(overview.avg_response_seconds), 'per agent message', '#a855f7')}
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Recent Activity Feed</span><span style="font-size:0.7rem;color:var(--muted)">Latest 50 messages</span></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>User</th><th>Conversation</th><th>Role</th><th>Time</th><th>Length</th><th>Tokens</th><th>Resp Time</th><th>Model</th></tr></thead>
+            <tbody>${recent.map(r=>`<tr>
+              <td style="font-size:0.72rem;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.email)}</td>
+              <td style="font-size:0.72rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.conversation_title||'Untitled')}</td>
+              <td><span class="badge ${r.role==='user'?'badge-blue':'badge-teal'}">${r.role}</span></td>
+              <td style="font-size:0.7rem;color:var(--muted);white-space:nowrap">${relTime(r.created_at)}</td>
+              <td style="font-size:0.72rem">${fmtNum(r.content_length)} chars</td>
+              <td style="font-size:0.72rem">${r.tokens?fmtNum(r.tokens):'—'}</td>
+              <td style="font-size:0.72rem;color:${r.elapsed_secs>30?'#f87171':r.elapsed_secs>15?'#fbbf24':'#4ade80'}">${r.elapsed_secs?fmtSecs(r.elapsed_secs):'—'}</td>
+              <td style="font-size:0.7rem">
+                ${r.model?`<span class="prov-${(r.provider||'').toLowerCase()}">${escHtml(r.model.split(':')[0])}</span>`:'<span style="color:var(--muted)">—</span>'}
+              </td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+// ─── MODELS ───────────────────────────────────────────────
+async function renderModels() {
+  const data = await apiFetch('/admin/models/usage').then(r=>r.json());
+  const { usage, preferences } = data;
+  const totalTokens = usage.reduce((s,m)=>s+(+m.total_tokens||0),0);
+
+  showContent(`
+    <div class="fade-up">
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Token Usage by Model</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:240px"><canvas id="chart-model-tokens"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Message Count by Model</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:240px"><canvas id="chart-model-msgs"></canvas></div></div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Usage Statistics</span></div>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead><tr><th>Model</th><th>Provider</th><th>Messages</th><th>Total Tokens</th><th>In / Out</th><th>Avg Resp</th><th>Users</th></tr></thead>
+              <tbody>${usage.map(m=>`<tr onclick="showModelDrill('${escHtml(m.model_identifier)}','${escHtml(m.provider)}')">
+                <td style="font-weight:600;font-size:0.78rem">${escHtml(m.model_identifier)}</td>
+                <td><span class="badge badge-${provColor(m.provider)}">${escHtml(m.provider)}</span></td>
+                <td>${fmtNum(m.message_count)}</td>
+                <td>
+                  <div>${fmtNum(m.total_tokens)}</div>
+                  <div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;width:80px">
+                    <div style="height:100%;background:#6366f1;border-radius:2px;width:${totalTokens>0?Math.round((+m.total_tokens/totalTokens)*100):0}%"></div>
+                  </div>
+                </td>
+                <td style="font-size:0.72rem;color:var(--muted)">${fmtNum(m.input_tokens)} / ${fmtNum(m.output_tokens)}</td>
+                <td style="color:${+m.avg_response_secs>30?'#f87171':+m.avg_response_secs>15?'#fbbf24':'#4ade80'}">${fmtSecs(m.avg_response_secs)}</td>
+                <td>${fmtNum(m.unique_users)}</td>
+              </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Current User Preferences</span></div>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead><tr><th>Model</th><th>Provider</th><th>Users</th></tr></thead>
+              <tbody>${preferences.map(p=>`<tr>
+                <td style="font-size:0.78rem;font-weight:600">${escHtml(p.name)}</td>
+                <td><span class="badge badge-${provColor(p.provider)}">${escHtml(p.provider)}</span></td>
+                <td style="font-weight:700;color:var(--blue)">${fmtNum(p.users_count)}</td>
+              </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  // Doughnut charts
+  const doughnutBase = (id, labels, values, colors) => {
+    destroyChart(id);
+    const ctx = document.getElementById(id)?.getContext('2d');
+    if (!ctx) return;
+    chartInstances[id] = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#0b1427', borderWidth: 2, hoverOffset: 6 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+        plugins: {
+          legend: { position: 'right', labels: { color: '#6b7a99', font: { size: 11 }, padding: 14, boxWidth: 12, usePointStyle: true } },
+          tooltip: { backgroundColor: '#0b1427', titleColor: '#e8eeff', bodyColor: '#6b7a99', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 }
+        },
+        cutout: '65%'
+      }
+    });
+  };
+
+  const palette = ['#6366f1','#3b82f6','#2dd4bf','#22c55e','#f59e0b','#f97316','#ef4444','#a855f7','#ec4899','#06b6d4'];
+  doughnutBase('chart-model-tokens', usage.map(m=>m.model_identifier), usage.map(m=>+m.total_tokens), palette);
+  doughnutBase('chart-model-msgs',   usage.map(m=>m.model_identifier), usage.map(m=>+m.message_count), palette);
+}
+
+// ─── PERFORMANCE ──────────────────────────────────────────
+async function renderPerformance() {
+  const data = await apiFetch('/admin/performance').then(r=>r.json());
+  const { buckets, percentiles, byModel } = data;
+  const p = percentiles || {};
+
+  showContent(`
+    <div class="fade-up">
+      <div class="kpi-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:16px">
+        ${kpiTile('P50 (median)', p.p50?fmtSecs(p.p50):'—', 'response time', '#22c55e')}
+        ${kpiTile('P75', p.p75?fmtSecs(p.p75):'—', 'response time', '#3b82f6')}
+        ${kpiTile('P90', p.p90?fmtSecs(p.p90):'—', 'response time', '#6366f1')}
+        ${kpiTile('P95', p.p95?fmtSecs(p.p95):'—', 'response time', '#f59e0b')}
+        ${kpiTile('Average', p.avg?fmtSecs(p.avg):'—', 'mean response', '#a855f7')}
+        ${kpiTile('Max', p.max?fmtSecs(p.max):'—', 'slowest response', '#ef4444')}
+      </div>
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Response Time Distribution</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:220px"><canvas id="chart-perf-dist"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Average Response Time by Model</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:220px"><canvas id="chart-perf-model"></canvas></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Performance by Model (detailed)</span></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Model</th><th>Provider</th><th>Avg Resp</th><th>P95</th><th>Sample Count</th><th>Perf Rating</th></tr></thead>
+            <tbody>${byModel.map(m=>{
+              const rating = m.avg_secs<5?'⚡ Fast':m.avg_secs<15?'✅ Good':m.avg_secs<30?'⚠️ Slow':'🔴 Very Slow';
+              return `<tr>
+                <td style="font-weight:600;font-size:0.78rem">${escHtml(m.model)}</td>
+                <td><span class="badge badge-${provColor(m.provider)}">${escHtml(m.provider)}</span></td>
+                <td style="font-weight:700;color:${m.avg_secs<15?'#4ade80':'#fbbf24'}">${fmtSecs(m.avg_secs)}</td>
+                <td style="color:${m.p95_secs<30?'var(--text)':'#f87171'}">${fmtSecs(m.p95_secs)}</td>
+                <td style="color:var(--muted)">${fmtNum(m.sample_count)}</td>
+                <td>${rating}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `);
+
+  // Bar chart - distribution
+  destroyChart('chart-perf-dist');
+  const distCtx = document.getElementById('chart-perf-dist')?.getContext('2d');
+  if (distCtx) {
+    chartInstances['chart-perf-dist'] = new Chart(distCtx, {
+      type:'bar',
+      data:{ labels: buckets.map(b=>b.bucket), datasets:[{ label:'Responses', data:buckets.map(b=>+b.count), backgroundColor:['#22c55e','#3b82f6','#f59e0b','#f97316','#ef4444'], borderRadius:6 }] },
+      options:{ responsive:true, maintainAspectRatio:false, animation:{duration:400}, plugins:{ legend:{display:false}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#6b7a99'} }, scales:{ x:{ticks:{color:'#6b7a99',font:{size:11}},grid:{display:false}}, y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true} } }
+    });
+  }
+  // Horizontal bar - model comparison
+  destroyChart('chart-perf-model');
+  const modelCtx = document.getElementById('chart-perf-model')?.getContext('2d');
+  if (modelCtx && byModel.length) {
+    chartInstances['chart-perf-model'] = new Chart(modelCtx, {
+      type:'bar',
+      data:{ labels:byModel.map(m=>m.model.split(':')[0].substring(0,18)), datasets:[
+        { label:'Avg (s)', data:byModel.map(m=>+m.avg_secs), backgroundColor:'rgba(99,102,241,0.7)', borderRadius:4 },
+        { label:'P95 (s)', data:byModel.map(m=>+m.p95_secs), backgroundColor:'rgba(245,158,11,0.5)', borderRadius:4 }
+      ]},
+      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, animation:{duration:400}, plugins:{ legend:{labels:{color:'#6b7a99',font:{size:10}}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#6b7a99'} }, scales:{ x:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true}, y:{ticks:{color:'#9ca3af',font:{size:10}},grid:{display:false}} } }
+    });
+  }
+}
+
+// ─── STORAGE ──────────────────────────────────────────────
+async function renderStorage() {
+  const data = await apiFetch('/admin/storage').then(r=>r.json());
+  const { users, totals } = data;
+  const grand = +totals?.grand_total_bytes || 0;
+
+  showContent(`
+    <div class="fade-up">
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+        ${kpiTile('Total Storage', fmtBytes(grand), fmtNum(totals?.total_files||0)+' files tracked', '#3b82f6')}
+        ${kpiTile('Input Files', fmtBytes(totals?.total_input_bytes||0), 'uploaded by users', '#22c55e')}
+        ${kpiTile('Output Files', fmtBytes(totals?.total_output_bytes||0), 'generated by agent', '#a855f7')}
+        ${kpiTile('Users w/ Files', fmtNum(users.length), 'have stored files', '#f97316')}
+      </div>
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Storage by User (top 10)</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:220px"><canvas id="chart-storage-users"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Input vs Output Split</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:220px"><canvas id="chart-storage-split"></canvas></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Storage by User</span></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>User</th><th>Total</th><th>Input</th><th>Input Files</th><th>Output</th><th>Output Files</th><th>Last Activity</th></tr></thead>
+            <tbody>${users.map(u=>`<tr onclick="openUserDrill(${u.id},'${escHtml(u.email)}')">
+              <td style="font-size:0.78rem;font-weight:600">${escHtml(u.email)}</td>
+              <td style="font-weight:700">
+                ${fmtBytes(u.total_bytes)}
+                <div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;width:80px">
+                  <div style="height:100%;background:#3b82f6;border-radius:2px;width:${grand>0?Math.round((+u.total_bytes/grand)*100):0}%"></div>
+                </div>
+              </td>
+              <td style="color:#4ade80">${fmtBytes(u.input_bytes)}</td>
+              <td style="color:var(--muted)">${fmtNum(u.input_files)}</td>
+              <td style="color:#c084fc">${fmtBytes(u.output_bytes)}</td>
+              <td style="color:var(--muted)">${fmtNum(u.output_files)}</td>
+              <td style="color:var(--muted);font-size:0.72rem">${relTime(u.last_activity)}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const top10 = users.slice(0,10);
+  destroyChart('chart-storage-users');
+  const ctx1 = document.getElementById('chart-storage-users')?.getContext('2d');
+  if (ctx1) {
+    chartInstances['chart-storage-users'] = new Chart(ctx1, {
+      type:'bar', indexAxis:'y',
+      data:{ labels:top10.map(u=>u.email.split('@')[0]), datasets:[
+        { label:'Input', data:top10.map(u=>+u.input_bytes), backgroundColor:'rgba(34,197,94,0.7)', borderRadius:3 },
+        { label:'Output', data:top10.map(u=>+u.output_bytes), backgroundColor:'rgba(168,85,247,0.7)', borderRadius:3 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, animation:{duration:400}, plugins:{ legend:{labels:{color:'#6b7a99',font:{size:10}}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#6b7a99', callbacks:{label: ctx=>`${ctx.dataset.label}: ${fmtBytes(ctx.raw)}`}} }, scales:{ x:{stacked:true,ticks:{color:'#6b7a99',font:{size:9},callback:v=>fmtBytes(v)},grid:{color:'rgba(255,255,255,0.05)'}}, y:{stacked:true,ticks:{color:'#9ca3af',font:{size:10}},grid:{display:false}} } }
+    });
+  }
+  destroyChart('chart-storage-split');
+  const ctx2 = document.getElementById('chart-storage-split')?.getContext('2d');
+  if (ctx2) {
+    chartInstances['chart-storage-split'] = new Chart(ctx2, {
+      type:'doughnut',
+      data:{ labels:['Input Files','Output Files'], datasets:[{ data:[+totals.total_input_bytes,+totals.total_output_bytes], backgroundColor:['rgba(34,197,94,0.8)','rgba(168,85,247,0.8)'], borderColor:'#0b1427', borderWidth:2, hoverOffset:6 }] },
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'65%', plugins:{ legend:{position:'bottom',labels:{color:'#6b7a99',font:{size:11},padding:16}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#6b7a99',callbacks:{label:ctx=>`${ctx.label}: ${fmtBytes(ctx.raw)}`}} } }
+    });
+  }
+}
+
+// ─── SKILLS ───────────────────────────────────────────────
+async function renderSkills() {
+  const rows = await apiFetch('/admin/skills').then(r=>r.json());
+  showContent(`
+    <div class="fade-up">
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Skills Adoption (top 15)</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:300px"><canvas id="chart-skills-bar"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Enable vs Disable Rate</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:300px"><canvas id="chart-skills-ratio"></canvas></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">All Skills</span></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Skill</th><th>Enabled By</th><th>Disabled By</th><th>Adoption Rate</th><th>Trend</th></tr></thead>
+            <tbody>${rows.map(s=>{
+              const rate = s.total_users>0?Math.round((s.enabled_by/s.total_users)*100):0;
+              return `<tr>
+                <td style="font-weight:600;font-size:0.82rem">${escHtml(s.skill_name)}</td>
+                <td style="color:#4ade80;font-weight:700">${fmtNum(s.enabled_by)}</td>
+                <td style="color:#f87171">${fmtNum(s.disabled_by)}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div class="progress-track" style="width:80px"><div class="progress-fill" style="width:${rate}%;background:${rate>70?'#22c55e':rate>40?'#3b82f6':'#6b7a99'}"></div></div>
+                    <span style="font-size:0.72rem;color:var(--muted)">${rate}%</span>
+                  </div>
+                </td>
+                <td>${rate>70?'🔥 Popular':rate>40?'📈 Growing':rate>20?'📊 Moderate':'💤 Low'}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const top = rows.slice(0,15);
+  destroyChart('chart-skills-bar');
+  const ctx1 = document.getElementById('chart-skills-bar')?.getContext('2d');
+  if (ctx1) {
+    chartInstances['chart-skills-bar'] = new Chart(ctx1, {
+      type:'bar', indexAxis:'y',
+      data:{ labels:top.map(s=>s.skill_name), datasets:[
+        { label:'Enabled', data:top.map(s=>+s.enabled_by), backgroundColor:'rgba(34,197,94,0.7)', borderRadius:3 },
+        { label:'Disabled', data:top.map(s=>+s.disabled_by), backgroundColor:'rgba(239,68,68,0.4)', borderRadius:3 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, animation:{duration:400}, plugins:{ legend:{labels:{color:'#6b7a99',font:{size:10}}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#6b7a99'} }, scales:{ x:{stacked:false,ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true}, y:{ticks:{color:'#9ca3af',font:{size:9}},grid:{display:false}} } }
+    });
+  }
+  destroyChart('chart-skills-ratio');
+  const ctx2 = document.getElementById('chart-skills-ratio')?.getContext('2d');
+  if (ctx2) {
+    const totalEnabled = rows.reduce((s,r)=>s+(+r.enabled_by),0);
+    const totalDisabled = rows.reduce((s,r)=>s+(+r.disabled_by),0);
+    chartInstances['chart-skills-ratio'] = new Chart(ctx2, {
+      type:'doughnut',
+      data:{ labels:['Enabled','Disabled'], datasets:[{ data:[totalEnabled,totalDisabled], backgroundColor:['rgba(34,197,94,0.8)','rgba(239,68,68,0.5)'], borderColor:'#0b1427', borderWidth:2, hoverOffset:6 }] },
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{position:'bottom',labels:{color:'#6b7a99',font:{size:12},padding:16}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#6b7a99'} } }
+    });
+  }
+}
+
+// ─── DRILL PANEL ──────────────────────────────────────────
+function openDrill() {
+  document.getElementById('drill-panel').classList.add('open');
+  document.getElementById('drill-overlay').classList.add('open');
+}
+function closeDrill() {
+  document.getElementById('drill-panel').classList.remove('open');
+  document.getElementById('drill-overlay').classList.remove('open');
+}
+
+
+// ─── AGENT TEAMS ──────────────────────────────────────────
+async function renderAgentTeams() {
+  const [data, days] = [await apiFetch('/admin/agent-teams?days=30').then(r=>r.json()), 30];
+  const s = data.split || {};
+  const total = +s.total_requests || 1;
+  const teamPct = total ? ((+s.team_requests/total)*100).toFixed(1) : '0.0';
+  const fallbackPct = total ? ((+s.fallback_requests/total)*100).toFixed(1) : '0.0';
+
+  showContent(`
+    <div class="fade-up">
+      <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
+        ${kpiTile('Team Requests', fmtNum(s.team_requests||0), teamPct+'% of all requests', '#6366f1')}
+        ${kpiTile('Single Agent', fmtNum(s.single_requests||0), (100-+teamPct).toFixed(1)+'% of all requests', '#22c55e')}
+        ${kpiTile('Team Fallbacks', fmtNum(s.fallback_requests||0), fallbackPct+'% fallback rate', +fallbackPct>5?'#ef4444':'#f59e0b')}
+        ${kpiTile('Avg Agents/Team', (+s.avg_agents_when_team||0).toFixed(1), 'per team request', '#a855f7')}
+        ${kpiTile('Team vs Single Speed', fmtSecs(s.avg_team_elapsed||0)+' / '+fmtSecs(s.avg_single_elapsed||0), 'team / single avg', '#2dd4bf')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Team vs Single (30d)</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:200px"><canvas id="chart-team-split"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Agent Count Distribution</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:200px"><canvas id="chart-agent-dist"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Top Team Triggers</span></div>
+          <div class="card-body" style="padding:8px">
+            ${(data.reasons||[]).map(r=>`
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border)">
+                <span style="font-size:0.75rem;color:var(--text)">${escHtml(r.reason.replace(/_/g,' '))}</span>
+                <span class="badge badge-purple">${fmtNum(r.count)}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Team Usage Trend (30d)</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:200px"><canvas id="chart-team-trend"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Capability Combos Triggering Teams</span></div>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead><tr><th>Trigger</th><th>Intent</th><th>Count</th><th>Avg Time</th></tr></thead>
+              <tbody>${(data.capabilityCombos||[]).map(c=>`<tr>
+                <td style="font-size:0.75rem;font-weight:600">${escHtml(c.trigger?.replace(/_/g,' ')||'—')}</td>
+                <td style="color:var(--muted);font-size:0.73rem">${escHtml(c.intent||'—')}</td>
+                <td><span class="badge badge-blue">${fmtNum(c.count)}</span></td>
+                <td style="color:${+c.avg_secs>30?'#fbbf24':'#4ade80'}">${fmtSecs(c.avg_secs)}</td>
+              </tr>`).join('')}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      ${(data.fallbacks||[]).length ? `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Team→Single Fallbacks (recent)</span>
+          <span class="badge badge-red">${data.fallbacks.length} events</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Time</th><th>Provider</th><th>Reason</th><th>Error</th><th>Elapsed</th></tr></thead>
+            <tbody>${data.fallbacks.map(f=>`<tr>
+              <td style="color:var(--muted);font-size:0.72rem">${new Date(f.created_at).toLocaleString()}</td>
+              <td><span class="badge badge-${provColor(f.provider||'')}">${escHtml(f.provider||'—')}</span></td>
+              <td style="font-size:0.73rem">${escHtml(f.reason?.replace(/_/g,' ')||'—')}</td>
+              <td style="font-size:0.7rem;color:#f87171;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml((f.error_snippet||'').substring(0,80))}</td>
+              <td style="color:${+f.elapsed_seconds>60?'#ef4444':'#fbbf24'}">${fmtSecs(f.elapsed_seconds)}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>` : '<div class="card"><div class="card-body" style="text-align:center;color:var(--muted);padding:30px">No team fallbacks recorded ✓</div></div>'}
+    </div>
+  `);
+
+  destroyChart('chart-team-split');
+  const splitCtx = document.getElementById('chart-team-split')?.getContext('2d');
+  if (splitCtx) {
+    chartInstances['chart-team-split'] = new Chart(splitCtx, {
+      type:'doughnut',
+      data:{ labels:['Team','Single','Fallback'], datasets:[{ data:[+s.team_requests||0,+s.single_requests||0,+s.fallback_requests||0], backgroundColor:['#6366f1','#22c55e','#ef4444'], borderWidth:0, hoverOffset:6 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{labels:{color:'#9ca3af',font:{size:11}}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#9ca3af'} }, cutout:'65%' }
+    });
+  }
+  destroyChart('chart-agent-dist');
+  const distCtx = document.getElementById('chart-agent-dist')?.getContext('2d');
+  if (distCtx && data.agentDist?.length) {
+    chartInstances['chart-agent-dist'] = new Chart(distCtx, {
+      type:'bar',
+      data:{ labels: data.agentDist.map(d=>d.agent_count+' agents'), datasets:[{ label:'Times used', data:data.agentDist.map(d=>+d.occurrences), backgroundColor:['#6366f1','#a855f7','#3b82f6','#2dd4bf'], borderRadius:6 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#9ca3af'} }, scales:{ x:{ticks:{color:'#6b7a99',font:{size:11}},grid:{display:false}}, y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true} } }
+    });
+  }
+  destroyChart('chart-team-trend');
+  const trendCtx = document.getElementById('chart-team-trend')?.getContext('2d');
+  if (trendCtx && data.daily?.length) {
+    chartInstances['chart-team-trend'] = new Chart(trendCtx, {
+      type:'bar',
+      data:{
+        labels: data.daily.map(d=>d.date),
+        datasets:[
+          { label:'Team', data:data.daily.map(d=>+d.team_count), backgroundColor:'rgba(99,102,241,0.8)', borderRadius:3, stack:'s' },
+          { label:'Single', data:data.daily.map(d=>+d.single_count), backgroundColor:'rgba(34,197,94,0.5)', borderRadius:3, stack:'s' },
+          { label:'Fallback', data:data.daily.map(d=>+d.fallback_count), backgroundColor:'rgba(239,68,68,0.8)', borderRadius:3, stack:'s' },
+        ]
+      },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{labels:{color:'#9ca3af',font:{size:10}}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#9ca3af',mode:'index'} }, scales:{ x:{ticks:{color:'#6b7a99',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true,stacked:true} } }
+    });
+  }
+}
+
+// ─── INFRASTRUCTURE ───────────────────────────────────────
+async function renderInfrastructure() {
+  const [docker, concurrency] = await Promise.all([
+    apiFetch('/admin/docker-stats').then(r=>r.json()).catch(()=>({})),
+    apiFetch('/admin/concurrency').then(r=>r.json()).catch(()=>({})),
+  ]);
+
+  const agg  = docker.aggregate   || {};
+  const sys  = docker.system      || {};
+  const be   = docker.backend     || {};
+  const live = concurrency.live   || {};
+  const tp   = concurrency.throughput  || {};
+  const perf = concurrency.performance || {};
+  const err  = concurrency.errors      || {};
+  const fsrv = concurrency.frontend_server || 'unknown';
+  const isNginx = fsrv === 'nginx';
+  const isServe = fsrv === 'serve';
+
+  // Service containers (backend, frontend, postgres) + agent containers
+  const svcContainers   = docker.serviceContainers || [];
+  const agentContainers = docker.agentContainers   || [];
+
+  // Diagnosis colour / label
+  const DIAG = {
+    compute_issue:    { color: '#ef4444', label: '🔴 Compute issue — raise Docker limits' },
+    compute_pressure: { color: '#f59e0b', label: '🟡 Compute pressure — monitor closely'  },
+    application_issue:{ color: '#3b82f6', label: '🔵 Application-level — containers are fine' },
+    service_issue:    { color: '#f97316', label: '🟠 Service container issue — affects all users' },
+    no_agents:        { color: '#22c55e', label: '🟢 Healthy — no active user sessions'  },
+    no_containers:    { color: '#6b7a99', label: '⚪ No containers detected'              },
+  };
+  const diag = DIAG[agg.overallDiagnosis] || { color: '#6b7a99', label: '—' };
+
+  // Role display config
+  const ROLE_META = {
+    backend:  { label: 'Backend (Express + Claude Code)',  badge: 'badge-blue',   icon: '⚙️'  },
+    frontend: { label: 'Frontend (serve / nginx)',          badge: 'badge-teal',   icon: '🌐'  },
+    postgres: { label: 'PostgreSQL',                        badge: 'badge-purple', icon: '🗄️'  },
+    agent:    { label: 'User agent',                        badge: 'badge-gray',   icon: '🤖'  },
+    other:    { label: 'Other',                             badge: 'badge-gray',   icon: '📦'  },
+  };
+
+  function diagBadge(d) {
+    const map = {
+      healthy:       '<span class="badge badge-green">healthy</span>',
+      cpu_elevated:  '<span class="badge badge-teal">CPU elevated</span>',
+      mem_pressure:  '<span class="badge badge-amber">mem pressure</span>',
+      cpu_saturated: '<span class="badge badge-red">CPU saturated</span>',
+      mem_saturated: '<span class="badge badge-red">mem saturated</span>',
+    };
+    return map[d] || '<span class="badge badge-gray">—</span>';
+  }
+
+  function containerRow(c) {
+    const cpuColor = c.cpuNum>80?'#ef4444':c.cpuNum>50?'#fbbf24':'#4ade80';
+    const memColor = c.memNum>80?'#ef4444':c.memNum>60?'#fbbf24':'#4ade80';
+    const rm = ROLE_META[c.role] || ROLE_META.other;
+    const label = c.role === 'agent' ? `User ${escHtml(c.userId||'?')}` : rm.label;
+    return `<tr title="${escHtml(c.diagReason||'')}">
+      <td>
+        <div style="font-size:0.75rem;font-weight:600;color:var(--text)">${label}</div>
+        <div style="font-size:0.68rem;color:var(--muted);font-family:'JetBrains Mono',monospace">${escHtml(c.name)}</div>
+      </td>
+      <td><span class="badge ${rm.badge}" style="font-size:0.62rem">${rm.icon} ${c.role}</span></td>
+      <td style="font-weight:700;color:${cpuColor};font-size:0.82rem">${c.cpu}</td>
+      <td style="color:var(--muted);font-size:0.72rem">${c.cpuLimit}</td>
+      <td style="font-size:0.75rem">${c.memUsed}</td>
+      <td style="font-weight:700;color:${memColor};font-size:0.82rem">${c.memPerc}</td>
+      <td style="color:var(--muted);font-size:0.72rem">${c.memLimit}</td>
+      <td style="font-size:0.7rem;color:var(--muted)">${c.netIO}</td>
+      <td style="color:var(--muted);font-size:0.72rem">${c.pids}</td>
+      <td><span class="badge ${c.status?.includes('Up')?'badge-green':'badge-amber'}" style="font-size:0.62rem">${escHtml((c.status||'').substring(0,12))}</span></td>
+      <td>${diagBadge(c.diagnosis)}</td>
+    </tr>`;
+  }
+
+  showContent(`
+    <div class="fade-up">
+
+      <!-- ── ROW 1: Live KPIs ──────────────────────────────────────── -->
+      <div class="kpi-grid" style="grid-template-columns:repeat(7,1fr);margin-bottom:16px">
+        ${kpiTile('All Containers', (docker.containers||[]).length, sys.running+' running', '#3b82f6')}
+        ${kpiTile('User Agents',    agentContainers.length, 'active sessions', '#6366f1')}
+        ${kpiTile('Live Streams',   be.active_streams||0, 'SSE connections', +be.active_streams>8?'#ef4444':+be.active_streams>3?'#f59e0b':'#22c55e')}
+        ${kpiTile('Active Teams',   be.active_teams||0, 'multi-agent now', '#a855f7')}
+        ${kpiTile('Req/min',        tp.rpm_1h||'—', '1h rolling avg', '#2dd4bf')}
+        ${kpiTile('P95 Response',   perf.p95?fmtSecs(perf.p95):'—', 'last hour', +perf.p95>60?'#ef4444':+perf.p95>20?'#f59e0b':'#22c55e')}
+        ${kpiTile('Backend RSS',    be.rss_mb?be.rss_mb+'MB':'—', 'heap: '+be.heap_used_mb+'MB', +be.rss_mb>400?'#f59e0b':'#22c55e')}
+      </div>
+
+      <!-- ── ROW 2: Diagnosis banner ───────────────────────────────── -->
+      <div class="card" style="margin-bottom:16px;border-color:${diag.color}55">
+        <div class="card-header" style="background:${diag.color}12">
+          <span class="card-title" style="font-size:0.9rem">${diag.label}</span>
+          <span style="font-size:0.7rem;color:var(--muted)">${(docker.containers||[]).length} containers total · ${agentContainers.length} user agents</span>
+        </div>
+        <div class="card-body" style="font-size:0.79rem;line-height:1.8;color:var(--text)">
+          ${escHtml(agg.diagSummary||'Waiting for data...')}
+          ${agg.overallDiagnosis==='compute_issue'?`
+            <div style="margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.08);border-radius:6px;border:1px solid rgba(239,68,68,0.2)">
+              <span style="color:#ef4444;font-weight:600">→ Fix:</span>
+              <code style="font-size:0.71rem;margin-left:6px">containerManager.js: --memory 1g --cpus 1.0  (currently 512m / 0.5)</code>
+            </div>` : agg.overallDiagnosis==='application_issue'?`
+            <div style="margin-top:10px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:6px;border:1px solid rgba(59,130,246,0.2)">
+              <span style="color:#60a5fa;font-weight:600">→ Check:</span>
+              <span style="margin-left:6px;font-size:0.75rem">Frontend: ${isNginx?'nginx ✓':'serve ⚠ (switch to nginx)'}  ·  Active SSE streams: ${be.active_streams||0}  ·  Docker exec latency: ~200–500ms per request</span>
+            </div>` : ''}
+        </div>
+      </div>
+
+      <!-- ── ROW 3: Service containers (backend + frontend + postgres) ─ -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <span class="card-title">Service Containers</span>
+          <span style="font-size:0.7rem;color:var(--muted)">backend · frontend · postgres — always running</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr>
+              <th>Container</th><th>Role</th>
+              <th>CPU</th><th>CPU limit</th>
+              <th>Mem used</th><th>Mem %</th><th>Mem limit</th>
+              <th>Net I/O</th><th>PIDs</th><th>Status</th><th>Health</th>
+            </tr></thead>
+            <tbody>
+              ${svcContainers.length
+                ? svcContainers.map(containerRow).join('')
+                : `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:20px">
+                    No service containers found. Are they named <code>claude-local-updated-backend-1</code> etc.?
+                   </td></tr>`}
+            </tbody>
+          </table>
+        </div>
+        <!-- Postgres extra stats -->
+        ${svcContainers.find(c=>c.role==='postgres')?.pgStats ? (() => {
+          const pg = svcContainers.find(c=>c.role==='postgres').pgStats;
+          return `<div style="display:flex;gap:20px;padding:10px 16px;border-top:1px solid var(--border);font-size:0.73rem;color:var(--muted)">
+            <span>Active connections: <strong style="color:var(--text)">${pg.active_connections||0}</strong></span>
+            <span>Total connections: <strong style="color:var(--text)">${pg.total_connections||0}</strong></span>
+            <span>DB size: <strong style="color:var(--text)">${pg.db_size||'—'}</strong></span>
+            <span>Cache hit: <strong style="color:${+pg.cache_hit_pct>95?'#4ade80':+pg.cache_hit_pct>85?'#fbbf24':'#f87171'}">${pg.cache_hit_pct||'—'}%</strong></span>
+          </div>`;
+        })() : ''}
+        <!-- Frontend server note inline -->
+        <div style="padding:8px 16px;border-top:1px solid var(--border);font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:8px">
+          Frontend server:
+          ${isNginx
+            ? '<span style="color:#4ade80;font-weight:600">nginx ✓ — async I/O, concurrent SSE handled correctly</span>'
+            : isServe
+              ? '<span style="color:#fbbf24;font-weight:600">serve ⚠ — single-threaded, SSE streams block at 10+ concurrent users. Switch to Dockerfile.nginx to fix.</span>'
+              : '<span style="color:var(--muted)">unknown — check container name</span>'}
+        </div>
+      </div>
+
+      <!-- ── ROW 4: User agent containers ─────────────────────────── -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <span class="card-title">User Agent Containers</span>
+          <span style="font-size:0.7rem;color:var(--muted)">
+            ${agentContainers.length} active ·
+            <span style="color:${agg.agentSaturated>0?'#ef4444':'#4ade80'}">${agg.agentSaturated||0} saturated</span> ·
+            <span style="color:${agg.agentPressure>0?'#fbbf24':'#9ca3af'}">${agg.agentPressure||0} elevated</span> ·
+            ${agg.agentHealthy||0} healthy
+          </span>
+        </div>
+        ${agentContainers.length ? `
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr>
+              <th>User / Container</th><th>Role</th>
+              <th>CPU</th><th>CPU limit</th>
+              <th>Mem used</th><th>Mem %</th><th>Mem limit</th>
+              <th>Net I/O</th><th>PIDs</th><th>Status</th><th>Health</th>
+            </tr></thead>
+            <tbody>${agentContainers.map(containerRow).join('')}</tbody>
+          </table>
+        </div>
+        <div style="padding:8px 16px;border-top:1px solid var(--border);font-size:0.68rem;color:var(--muted)">
+          Hover a row to see diagnosis detail. Limits are set in <code>containerManager.js</code> (<code>--memory 512m --cpus 0.5</code> by default). Agent containers stop after 30 min idle.
+        </div>
+        ` : `<div class="card-body" style="text-align:center;color:var(--muted);padding:28px">
+          No active user sessions right now.<br>
+          <span style="font-size:0.72rem">A container starts when a user sends their first message and stops after 30 min idle.</span>
+        </div>`}
+      </div>
+
+      <!-- ── ROW 5: Host + throughput + errors ─────────────────────── -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Host System</span></div>
+          <div class="card-body" style="padding:10px">
+            ${[['Host CPUs', sys.host_cpus||'—'], ['Host Memory', sys.host_mem_gb||'—'],
+               ['Total containers', sys.total_containers||'—'],
+               ['Running', sys.running||'—'], ['Stopped', sys.stopped||'—']
+            ].map(([k,v])=>`
+              <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+                <span style="font-size:0.74rem;color:var(--muted)">${k}</span>
+                <span style="font-size:0.8rem;font-weight:700;color:var(--text)">${v}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Message Throughput</span></div>
+          <div class="card-body" style="padding:10px">
+            ${[['Last 1 min', tp.last_1m||0], ['Last 5 min', tp.last_5m||0],
+               ['Last 1 hour', tp.last_1h||0], ['Req/min (1h avg)', tp.rpm_1h||0]
+            ].map(([l,v])=>`
+              <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+                <span style="font-size:0.74rem;color:var(--muted)">${l}</span>
+                <span style="font-weight:700;color:var(--text)">${fmtNum(v)}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">24h Errors</span></div>
+          <div class="card-body" style="padding:10px">
+            ${[
+              ['Total responses',     err.total_last_24h||0,     'var(--text)'],
+              ['Timeouts (>5 min)',   err.timeout_count||0,      +err.timeout_count>0?'#f87171':'#4ade80'],
+              ['Team fallbacks',      err.team_fallback_count||0,+err.team_fallback_count>5?'#f87171':+err.team_fallback_count>0?'#fbbf24':'#4ade80'],
+            ].map(([l,v,c])=>`
+              <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+                <span style="font-size:0.74rem;color:var(--muted)">${l}</span>
+                <span style="font-weight:700;color:${c}">${fmtNum(v)}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  `);
+}
+
+
+// ─── ERROR RATES ──────────────────────────────────────────
+async function renderErrorRates() {
+  const data = await apiFetch('/admin/error-rates?days=7').then(r=>r.json());
+
+  showContent(`
+    <div class="fade-up">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <span class="card-title">Timeout &amp; Fallback Rate by Model (7d)</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Model</th><th>Provider</th><th>Total</th><th>Timeouts</th><th>Timeout %</th><th>Team Fallbacks</th><th>Avg Time</th><th>Health</th></tr></thead>
+            <tbody>${(data.byModel||[]).map(m=>{
+              const health = +m.timeout_rate_pct>10?'🔴 Critical':+m.timeout_rate_pct>5?'🟡 Degraded':+m.avg_secs>30?'🟡 Slow':'🟢 Healthy';
+              return `<tr>
+                <td style="font-weight:600;font-size:0.78rem">${escHtml(m.model)}</td>
+                <td><span class="badge badge-${provColor(m.provider)}">${escHtml(m.provider)}</span></td>
+                <td style="color:var(--muted)">${fmtNum(m.total)}</td>
+                <td style="color:${+m.timeouts>0?'#f87171':'#4ade80'}">${fmtNum(m.timeouts)}</td>
+                <td style="font-weight:700;color:${+m.timeout_rate_pct>10?'#ef4444':+m.timeout_rate_pct>5?'#fbbf24':'#4ade80'}">${m.timeout_rate_pct||'0.0'}%</td>
+                <td style="color:${+m.team_fallbacks>0?'#fbbf24':'var(--muted)'}">${fmtNum(m.team_fallbacks)}</td>
+                <td>${fmtSecs(m.avg_secs)}</td>
+                <td>${health}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Daily Error Trend (7d)</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:210px"><canvas id="chart-err-trend"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Avg Response Time Trend (7d)</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:210px"><canvas id="chart-resp-trend"></canvas></div></div>
+        </div>
+      </div>
+
+      ${(data.slow||[]).length ? `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Slowest Responses (>30s)</span>
+          <span class="badge badge-amber">${data.slow.length} requests</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>User</th><th>Elapsed</th><th>Provider</th><th>Team?</th><th>Fallback?</th><th>Plan Reason</th><th>Time</th></tr></thead>
+            <tbody>${data.slow.map(r=>`<tr>
+              <td style="font-size:0.72rem;color:var(--muted)">${escHtml(r.email||'—')}</td>
+              <td style="font-weight:700;color:${+r.elapsed_seconds>120?'#ef4444':+r.elapsed_seconds>60?'#fbbf24':'#f97316'}">${fmtSecs(r.elapsed_seconds)}</td>
+              <td><span class="badge badge-${provColor(r.provider||'')}">${escHtml(r.provider||'—')}</span></td>
+              <td>${r.team_used?'<span class="badge badge-purple">team</span>':'<span class="badge badge-gray">single</span>'}</td>
+              <td>${r.fallback?'<span class="badge badge-red">fallback</span>':'<span class="badge badge-green">ok</span>'}</td>
+              <td style="font-size:0.72rem;color:var(--muted)">${escHtml(r.plan_reason?.replace(/_/g,' ')||'—')}</td>
+              <td style="font-size:0.7rem;color:var(--muted)">${new Date(r.created_at).toLocaleString()}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+        </div>
+      </div>` : ''}
+    </div>
+  `);
+
+  destroyChart('chart-err-trend');
+  const errCtx = document.getElementById('chart-err-trend')?.getContext('2d');
+  if (errCtx && data.daily?.length) {
+    chartInstances['chart-err-trend'] = new Chart(errCtx, {
+      type:'bar',
+      data:{
+        labels: data.daily.map(d=>d.date),
+        datasets:[
+          { label:'Timeouts', data:data.daily.map(d=>+d.timeouts), backgroundColor:'rgba(239,68,68,0.8)', borderRadius:3, stack:'s' },
+          { label:'Team Fallbacks', data:data.daily.map(d=>+d.team_fallbacks), backgroundColor:'rgba(245,158,11,0.7)', borderRadius:3, stack:'s' },
+        ]
+      },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{labels:{color:'#9ca3af',font:{size:10}}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#9ca3af',mode:'index'} }, scales:{ x:{ticks:{color:'#6b7a99',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true,stacked:true } } }
+    });
+  }
+  destroyChart('chart-resp-trend');
+  const respCtx = document.getElementById('chart-resp-trend')?.getContext('2d');
+  if (respCtx && data.daily?.length) {
+    chartInstances['chart-resp-trend'] = new Chart(respCtx, {
+      type:'line',
+      data:{
+        labels: data.daily.map(d=>d.date),
+        datasets:[{ label:'Avg Response (s)', data:data.daily.map(d=>+d.avg_secs||0), borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.15)', borderWidth:2, pointRadius:3, tension:0.3, fill:true }]
+      },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#9ca3af'} }, scales:{ x:{ticks:{color:'#6b7a99',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true} } }
+    });
+  }
+}
+
+// ─── BOOT ─────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

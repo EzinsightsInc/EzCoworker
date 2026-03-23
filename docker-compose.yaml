@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-claudedb_community}
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data_community:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    ports:
+      - "5600:5000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-claudedb_community}
+      - JWT_SECRET=${JWT_SECRET}
+      - OLLAMA_URL=${OLLAMA_URL}
+      - CONTEXT_MESSAGE_LIMIT=${CONTEXT_MESSAGE_LIMIT:-10}
+      - MAX_AGENT_TURNS=${MAX_AGENT_TURNS:-40}
+      - MAX_AGENT_TURNS_LOCAL=${MAX_AGENT_TURNS_LOCAL:-8}
+      - FRONTEND_URL=http://localhost:3600
+      - HOST_USER_DATA_PATH=${HOST_USER_DATA_PATH:-C:/claude_data_community/users}
+      - HOST_SKILLS_PATH=${HOST_SKILLS_PATH:-C:/claude_data_community/skills}
+      - HOST_PLUGINS_PATH=${HOST_PLUGINS_PATH:-C:/claude_data_community/plugins}
+      - HOST_MCP_SERVERS_PATH=${HOST_MCP_SERVERS_PATH:-C:/claude_data_community/mcp-servers}
+      - AGENT_IMAGE=claude-agent-image-community
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOST_USER_DATA_PATH:-C:/claude_data_community/users}:/srv/claude/users:rw
+      - ${HOST_SKILLS_PATH:-C:/claude_data_community/skills}:/srv/claude/skills:ro
+      - ${HOST_PLUGINS_PATH:-C:/claude_data_community/plugins}:/srv/claude/plugins:ro
+      - ${HOST_MCP_SERVERS_PATH:-C:/claude_data_community/mcp-servers}:/srv/claude/mcp-servers:ro
+      - ./backend/server.js:/app/server.js
+      - ./backend/containerManager.js:/app/containerManager.js
+      - ./backend/modelSync.js:/app/modelSync.js
+      - ./backend/agentTeamManager.js:/app/agentTeamManager.js
+      - ./backend/pluginManager.js:/app/pluginManager.js
+      - ./backend/executionPlanner.js:/app/executionPlanner.js
+    depends_on:
+      - postgres
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "3600:3500"
+    volumes:
+      - ./frontend/public/index.html:/usr/share/nginx/html/index.html
+      - ./frontend/public/admin.html:/usr/share/nginx/html/admin.html
+      - ./frontend/public/share.html:/usr/share/nginx/html/share.html
+      - ./frontend/public/image.png:/usr/share/nginx/html/image.png
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data_community:

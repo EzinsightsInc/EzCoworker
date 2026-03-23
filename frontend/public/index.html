@@ -1,0 +1,3866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EZ Coworker</title>
+    <link rel="icon" type="image/png" href="image.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <style>
+        /* === DESIGN SYSTEM: CSS VARIABLES === */
+        :root {
+            --bg-base:        #080e1a;
+            --bg-panel:       #0e1525;
+            --bg-surface:     #141e33;
+            --bg-input:       #1a2540;
+            --border-subtle:  rgba(255,255,255,0.06);
+            --border-mid:     rgba(255,255,255,0.1);
+            --border-strong:  rgba(255,255,255,0.18);
+            --accent-orange:  #f97316;
+            --accent-blue:    #3b82f6;
+            --accent-teal:    #2dd4bf;
+            --text-primary:   #f0f4ff;
+            --text-secondary: #8892ab;
+            --text-muted:     #4a5568;
+            --radius-sm: 6px;
+            --radius-md: 12px;
+            --radius-lg: 20px;
+            --shadow-glow-blue:   0 0 24px rgba(59,130,246,0.12);
+            --shadow-glow-orange: 0 0 20px rgba(249,115,22,0.15);
+        }
+
+        /* === GLOBAL: Font + Scrollbar + Selection === */
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Outfit', system-ui, sans-serif;
+            background: var(--bg-base);
+        }
+        ::selection { background: rgba(59,130,246,0.3); color: #f0f4ff; }
+        ::-webkit-scrollbar { width: 3px; height: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        /* === ATMOSPHERIC BACKGROUND === */
+        #chat-screen::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background:
+                radial-gradient(ellipse 60% 40% at 20% 80%, rgba(59,130,246,0.04) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 30% at 80% 20%, rgba(249,115,22,0.03) 0%, transparent 50%);
+        }
+        #chat-screen > * { position: relative; z-index: 1; }
+
+        /* === NOISE TEXTURE OVERLAY === */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.02;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 128px 128px;
+        }
+
+        /* === HEADING FONT === */
+        h1, h2, h3, .font-display { font-family: 'Outfit', sans-serif; }
+
+        /* === PAGE LOAD ANIMATION === */
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .anim-in-1 { animation: fadeSlideIn 0.4s ease-out both; }
+        .anim-in-2 { animation: fadeSlideIn 0.4s 0.08s ease-out both; }
+        .anim-in-3 { animation: fadeSlideIn 0.4s 0.16s ease-out both; }
+
+        /* === GRADIENT BORDERS on panels === */
+        .gradient-border {
+            position: relative;
+        }
+        .gradient-border::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 50%, rgba(249,115,22,0.06) 100%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        /* === SIDEBAR MOBILE === */
+        #sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(2px);
+            z-index: 40;
+        }
+        #sidebar-overlay.visible { display: block; }
+        @media (max-width: 767px) {
+            #app-sidebar {
+                position: fixed !important;
+                left: -100%;
+                top: 0; bottom: 0;
+                z-index: 50;
+                transition: left 0.25s cubic-bezier(0.4,0,0.2,1);
+                box-shadow: 4px 0 32px rgba(0,0,0,0.4);
+            }
+            #app-sidebar.open { left: 0; }
+        }
+
+        /* === HAMBURGER BUTTON === */
+        .hamburger-btn {
+            display: none;
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            border: 1px solid var(--border-mid);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .hamburger-btn:hover { background: var(--bg-surface); color: var(--text-primary); }
+        @media (max-width: 767px) { .hamburger-btn { display: flex; } }
+
+        /* --- Think blocks --- */
+        .think-block {
+            background: #111827;
+            border-left: 3px solid #2dd4bf;
+            padding: 0.6rem 0.9rem;
+            margin: 0.5rem 0;
+            font-family: ui-monospace, monospace;
+            font-size: 0.82em;
+            color: #6b7280;
+            white-space: pre-wrap;
+            border-radius: 0 0.375rem 0.375rem 0;
+        }
+
+        /* --- Code blocks --- */
+        .code-block-wrapper { position: relative; margin: 0.4em 0; }
+        .code-block-wrapper pre {
+            background: #0d1117; padding: 1em; border-radius: 0.5em;
+            overflow-x: auto; margin: 0; font-size: 0.85em; line-height: 1.55;
+        }
+        .copy-btn {
+            position: absolute; top: 0.45rem; right: 0.45rem;
+            background: rgba(55,65,81,0.85); color: #9ca3af; border: none;
+            padding: 0.15rem 0.55rem; border-radius: 0.25rem;
+            font-size: 0.7rem; cursor: pointer; opacity: 0;
+            transition: opacity 0.12s; font-family: ui-sans-serif, system-ui, sans-serif;
+        }
+        .code-block-wrapper:hover .copy-btn { opacity: 1; }
+        .copy-btn:hover { background: #374151; color: #e5e7eb; }
+
+        /* --- Prose in assistant messages --- */
+        .msg-prose p { margin-bottom: 0.65em; line-height: 1.65; }
+        .msg-prose p:last-child { margin-bottom: 0; }
+        .msg-prose ul { list-style: disc; margin: 0.35em 0 0.65em 1.25em; }
+        .msg-prose ol { list-style: decimal; margin: 0.35em 0 0.65em 1.25em; }
+        .msg-prose li { margin-bottom: 0.2em; line-height: 1.5; }
+        .msg-prose h1, .msg-prose h2, .msg-prose h3 {
+            font-weight: 600; margin: 0.9em 0 0.3em; line-height: 1.3; color: #f3f4f6;
+        }
+        .msg-prose h1 { font-size: 1.1em; }
+        .msg-prose h2 { font-size: 1.0em; }
+        .msg-prose h3 { font-size: 0.95em; }
+        .msg-prose code:not(pre code) {
+            background: #1e293b; padding: 0.1em 0.38em;
+            border-radius: 0.2em; font-size: 0.85em; color: #e2e8f0;
+            font-family: ui-monospace, monospace;
+        }
+        .msg-prose blockquote {
+            border-left: 2px solid #374151; padding-left: 0.8em;
+            color: #9ca3af; margin: 0.5em 0;
+        }
+        .msg-prose a { color: #60a5fa; text-decoration: underline; }
+        .msg-prose strong { font-weight: 600; color: #f3f4f6; }
+        .msg-prose hr { border-color: #374151; margin: 0.75em 0; }
+
+        /* --- Typing indicator --- */
+        .typing-dot {
+            display: inline-block; width: 5px; height: 5px;
+            background: #6b7280; border-radius: 50%;
+            animation: tdot 1.2s ease-in-out infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes tdot {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+            30% { transform: translateY(-5px); opacity: 1; }
+        }
+
+        /* --- Conversation sidebar items --- */
+        .conv-item {
+            cursor: pointer;
+            border-left: 2px solid transparent;
+            transition: background 0.1s;
+        }
+        .conv-item:hover { background: #1f2937; }
+        .conv-item.active { background: #172554; border-left-color: #3b82f6; }
+        .conv-del { opacity: 0; transition: opacity 0.1s; }
+        .conv-item:hover .conv-del { opacity: 1; }
+
+        /* --- Auth tabs --- */
+        .auth-tab {
+            border-bottom: 2px solid transparent;
+            transition: color 0.15s, border-color 0.15s;
+            cursor: pointer;
+        }
+        .auth-tab.active { border-bottom-color: #3b82f6; color: #60a5fa; }
+        .auth-tab:not(.active) { color: #6b7280; }
+        .auth-tab:not(.active):hover { color: #9ca3af; }
+
+        /* --- Message fade-in --- */
+        .msg-in { animation: msgIn 0.18s ease-out; }
+        @keyframes msgIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- Scrollbar --- */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+        /* --- Message actions (copy, regenerate) --- */
+        .msg-actions {
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .message-wrapper:hover .msg-actions {
+            opacity: 1;
+        }
+
+        /* --- Scroll to bottom button --- */
+        .scroll-bottom-btn {
+            position: fixed;
+            bottom: 140px;
+            right: 32px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #374151;
+            color: #d1d5db;
+            border: 1px solid #4b5563;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: none;
+        }
+        .scroll-bottom-btn:hover {
+            background: #4b5563;
+            color: #f3f4f6;
+        }
+        .scroll-bottom-btn.visible {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* --- Model dropdown --- */
+        #model-dropdown {
+            animation: fadeInUp 0.15s ease-out;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .model-item {
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        .model-item:hover {
+            background: #374151;
+        }
+        .model-item.selected {
+            background: #1e3a8a;
+        }
+
+        /* --- File chips (pending uploads) --- */
+        .file-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 2px 8px 2px 6px;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            max-width: 200px;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .file-chip .file-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-chip .file-chip-x {
+            cursor: pointer; color: #64748b; flex-shrink: 0;
+            transition: color 0.1s;
+        }
+        .file-chip .file-chip-x:hover { color: #ef4444; }
+
+        /* Upload in-progress state */
+        .file-chip.uploading {
+            background: #0f2133;
+            border-color: #1d4ed8;
+            color: #93c5fd;
+            animation: chipPulse 1.4s ease-in-out infinite;
+        }
+        @keyframes chipPulse {
+            0%, 100% { opacity: 1; border-color: #1d4ed8; }
+            50% { opacity: 0.65; border-color: #3b82f6; }
+        }
+        .chip-upload-spinner {
+            width: 9px; height: 9px;
+            border: 1.5px solid rgba(59,130,246,0.25);
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+            flex-shrink: 0;
+        }
+        /* Upload status bar below chips */
+        .upload-status-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            color: #3b82f6;
+            padding: 1px 2px;
+            animation: fadeSlideIn 0.15s ease-out;
+        }
+        .upload-status-bar .upload-bar-track {
+            flex: 1;
+            height: 2px;
+            background: #1e3a5f;
+            border-radius: 1px;
+            overflow: hidden;
+        }
+        .upload-status-bar .upload-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #1d4ed8, #60a5fa);
+            border-radius: 1px;
+            animation: uploadBarAnim 1.6s ease-in-out infinite;
+            width: 40%;
+        }
+        @keyframes uploadBarAnim {
+            0%   { transform: translateX(-100%); width: 60%; }
+            50%  { transform: translateX(80%); width: 60%; }
+            100% { transform: translateX(200%); width: 60%; }
+        }
+
+        /* --- File panel --- */
+        .file-panel-item {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 8px; border-radius: 4px;
+            font-size: 0.75rem; color: #9ca3af;
+            transition: background 0.1s;
+        }
+        .file-panel-item:hover { background: #1f2937; }
+        .file-panel-actions { opacity: 0; transition: opacity 0.1s; display: flex; gap: 2px; }
+        .file-panel-item:hover .file-panel-actions { opacity: 1; }
+
+        /* --- Drag overlay --- */
+        .drag-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(59,130,246,0.08);
+            border: 3px dashed #3b82f6;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            backdrop-filter: blur(1px);
+        }
+        .drag-overlay.visible { display: flex; }
+        .drag-overlay-inner {
+            background: rgba(8,14,26,0.85);
+            border: 2px dashed #3b82f6;
+            border-radius: 16px;
+            padding: 32px 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* --- Agent Activity Panel --- */
+        .activity-panel {
+            border: 1px solid #1e3a5f;
+            border-radius: 0.5rem;
+            background: #0d1b2a;
+            margin-bottom: 0.5rem;
+            overflow: hidden;
+            font-family: ui-monospace, monospace;
+            font-size: 0.78rem;
+            transition: all 0.2s;
+        }
+        .activity-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 0.75rem;
+            cursor: pointer;
+            user-select: none;
+            background: #0f2133;
+            border-bottom: 1px solid transparent;
+            transition: background 0.15s;
+        }
+        .activity-header:hover { background: #142840; }
+        .activity-header.open { border-bottom-color: #1e3a5f; }
+        .activity-spinner {
+            width: 10px; height: 10px;
+            border: 1.5px solid #1e4d7b;
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+        .activity-spinner.done { animation: none; border-color: #10b981; border-top-color: #10b981; }
+        .activity-spinner.error { animation: none; border-color: #ef4444; border-top-color: #ef4444; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .activity-title {
+            flex: 1;
+            color: #7dd3fc;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .activity-title.done { color: #6ee7b7; }
+        .activity-title.error { color: #fca5a5; }
+        .activity-meta {
+            color: #4b7095;
+            font-size: 0.7rem;
+        }
+        .activity-chevron {
+            color: #4b7095;
+            font-size: 0.65rem;
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        .activity-chevron.open { transform: rotate(90deg); }
+        .activity-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.25s ease;
+        }
+        .activity-body.open { max-height: 400px; overflow-y: auto; }
+        .activity-steps {
+            padding: 0.5rem 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .activity-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            padding: 0.15rem 0;
+            animation: stepIn 0.18s ease-out;
+        }
+        @keyframes stepIn {
+            from { opacity: 0; transform: translateX(-4px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .activity-step-icon { flex-shrink: 0; width: 14px; text-align: center; font-size: 0.72rem; line-height: 1.4; }
+        .activity-step-text { color: #94a3b8; line-height: 1.4; flex: 1; }
+        .activity-step.type-thinking .activity-step-text { color: #7dd3fc; }
+        .activity-step.type-chunk .activity-step-text { color: #94a3b8; font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 480px; }
+        .activity-step.type-tool_call .activity-step-text { color: #fbbf24; }
+        .activity-step.type-tool_result.success .activity-step-text { color: #6ee7b7; }
+        .activity-step.type-tool_result.fail .activity-step-text { color: #fca5a5; }
+        .activity-step.type-error .activity-step-text { color: #fca5a5; }
+        /* Plan status steps — planner decisions, agent spawns, phase transitions */
+        .activity-step.type-plan_status .activity-step-text { color: #c4b5fd; font-size: 0.72rem; }
+        .activity-step.type-plan_status.agent-spawn .activity-step-text { color: #93c5fd; }
+        .activity-step.type-plan_status.agent-done .activity-step-text  { color: #6ee7b7; }
+        .activity-step.type-plan_status.synthesis .activity-step-text   { color: #fde68a; }
+        .activity-step.type-plan_status.warn .activity-step-text        { color: #fca5a5; }
+        .activity-live-line {
+            color: #4b7095;
+            font-size: 0.7rem;
+            padding: 0.1rem 0 0.1rem 1.1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 480px;
+        }
+
+        /* --- Stop button --- */
+        .stop-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 6px;
+            border: 1px solid #7f1d1d;
+            background: #450a0a;
+            color: #fca5a5;
+            font-size: 0.7rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .stop-btn:hover { background: #7f1d1d; color: #fecaca; border-color: #991b1b; }
+        .stop-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .stop-btn svg { width: 10px; height: 10px; }
+
+        /* --- Notification prompt --- */
+        .notify-prompt {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            margin-top: 6px;
+            border-radius: 8px;
+            background: #172554;
+            border: 1px solid #1e3a8a;
+            font-size: 0.72rem;
+            color: #93c5fd;
+            animation: msgIn 0.2s ease-out;
+        }
+        .notify-prompt button {
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.12s;
+        }
+        .notify-prompt .notify-yes {
+            background: #1d4ed8;
+            color: #dbeafe;
+        }
+        .notify-prompt .notify-yes:hover { background: #2563eb; }
+        .notify-prompt .notify-no {
+            background: transparent;
+            color: #6b7280;
+            border: 1px solid #374151;
+        }
+        .notify-prompt .notify-no:hover { background: #1f2937; color: #9ca3af; }
+
+        /* === AUTO-SELECT TOGGLE === */
+        .auto-select-toggle {
+            position: relative;
+            display: inline-block;
+            width: 32px;
+            height: 18px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .auto-select-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .auto-select-track {
+            position: absolute;
+            inset: 0;
+            background: #1f2937;
+            border-radius: 9px;
+            border: 1px solid #374151;
+            transition: background 0.2s, border-color 0.2s;
+            display: block;
+        }
+        .auto-select-thumb {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            left: 2px;
+            top: 2px;
+            background: #4b5563;
+            border-radius: 50%;
+            transition: transform 0.2s, background 0.2s;
+            display: block;
+        }
+        .auto-select-toggle input:checked ~ .auto-select-track {
+            background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+            border-color: #4f46e5;
+        }
+        .auto-select-toggle input:checked ~ .auto-select-track .auto-select-thumb {
+            transform: translateX(14px);
+            background: #fff;
+        }
+
+        /* === CONVERSATION ACTIONS (rename/share in sidebar) === */
+        .conv-actions { opacity: 0; transition: opacity 0.1s; display: flex; gap: 1px; align-items: center; }
+        .conv-item:hover .conv-actions { opacity: 1; }
+        .conv-action-btn {
+            width: 20px; height: 20px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 4px; border: none; background: transparent;
+            color: #4b5563; cursor: pointer; transition: color 0.1s, background 0.1s;
+            flex-shrink: 0;
+        }
+        .conv-action-btn:hover { color: #9ca3af; background: rgba(255,255,255,0.06); }
+        .conv-action-btn.share:hover { color: #60a5fa; }
+        .conv-action-btn.del:hover { color: #f87171; }
+
+        /* Inline rename input */
+        .conv-rename-input {
+            background: #0e1525;
+            border: 1px solid #3b82f6;
+            border-radius: 4px;
+            color: #f0f4ff;
+            font-size: 0.75rem;
+            padding: 1px 6px;
+            width: 100%;
+            outline: none;
+        }
+
+        /* === SHARE MODAL === */
+        .share-modal-overlay {
+            position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+            animation: fadeSlideIn 0.15s ease-out;
+        }
+        .share-modal {
+            background: #0e1525;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 16px;
+            padding: 24px;
+            width: 420px;
+            max-width: 95vw;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+        }
+
+        /* === CHAT FILES PANEL === */
+        .chat-files-section {
+            border-top: 1px solid rgba(255,255,255,0.05);
+            background: rgba(10,16,28,0.6);
+            padding: 6px 8px;
+            font-size: 0.72rem;
+        }
+        .chat-files-header {
+            display: flex; align-items: center; gap: 6px;
+            color: #4b5563; cursor: pointer;
+            padding: 2px 0;
+            user-select: none;
+            transition: color 0.1s;
+        }
+        .chat-files-header:hover { color: #6b7280; }
+        .chat-files-body { display: none; margin-top: 4px; max-height: 240px; overflow-y: auto; }
+        .chat-files-body.open { display: block; }
+        .chat-file-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 3px 4px; border-radius: 4px;
+            color: #6b7280; transition: background 0.1s;
+        }
+        .chat-file-row:hover { background: rgba(255,255,255,0.04); color: #9ca3af; }
+        .chat-file-badge {
+            font-size: 0.6rem; padding: 1px 5px; border-radius: 3px;
+            flex-shrink: 0; font-weight: 600; text-transform: uppercase;
+        }
+        .chat-file-badge.input { background: #0c2a3b; color: #38bdf8; }
+        .chat-file-badge.output { background: #0d2b1a; color: #34d399; }
+        .skills-panel {
+            width: 272px;
+            min-width: 272px;
+            background: #111827;
+            border-left: 1px solid rgba(249,115,22,0.25);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            transition: width 0.2s ease, min-width 0.2s ease;
+            overflow: hidden;
+        }
+        .skills-panel.collapsed {
+            width: 36px;
+            min-width: 36px;
+        }
+        .skills-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(249,115,22,0.3);
+            flex-shrink: 0;
+            background: rgba(28,15,5,0.95);
+        }
+        .skills-panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 0;
+        }
+        .skills-panel.collapsed .skills-panel-body,
+        .skills-panel.collapsed .skills-panel-header .skills-header-content {
+            display: none;
+        }
+        .skills-header-content {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            min-width: 0;
+        }
+        .skills-panel-toggle-btn {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            color: #f97316;
+            cursor: pointer;
+            transition: color 0.1s, background 0.1s;
+            background: transparent;
+            border: none;
+        }
+        .skills-panel-toggle-btn:hover { color: #fb923c; background: rgba(249,115,22,0.1); }
+
+        /* Category section */
+        .skill-category {
+            margin-bottom: 2px;
+        }
+        .skill-category-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px 6px 8px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.1s;
+            border-radius: 4px;
+            margin: 1px 4px;
+            border-left: 2px solid rgba(249,115,22,0.4);
+        }
+        .skill-category-header:hover { background: rgba(249,115,22,0.07); border-left-color: #f97316; }
+        .skill-cat-chevron {
+            color: #f97316;
+            font-size: 0.6rem;
+            transition: transform 0.18s;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+        .skill-cat-chevron.open { transform: rotate(90deg); }
+        .skill-cat-name {
+            flex: 1;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #f97316;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .skill-cat-count {
+            font-size: 0.65rem;
+            color: #78350f;
+            flex-shrink: 0;
+        }
+        .skill-cat-body {
+            overflow: hidden;
+            max-height: 0;
+            transition: max-height 0.2s ease;
+        }
+        .skill-cat-body.open {
+            max-height: 600px;
+        }
+
+        /* Individual skill row */
+        .skill-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 4px 10px 4px 20px;
+            border-radius: 4px;
+            margin: 0 4px;
+            transition: background 0.1s;
+            cursor: default;
+        }
+        .skill-item:hover { background: #1a2535; }
+        .skill-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .skill-item-name {
+            font-size: 0.72rem;
+            font-weight: 500;
+            color: #d1d5db;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+        }
+        .skill-item-desc {
+            font-size: 0.65rem;
+            color: #4b5563;
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-top: 1px;
+        }
+        .skill-item.disabled .skill-item-name { color: #374151; }
+        .skill-item.disabled .skill-item-desc { color: #2d3748; }
+
+        /* Toggle switch */
+        .skill-toggle {
+            position: relative;
+            display: inline-block;
+            width: 28px;
+            height: 16px;
+            flex-shrink: 0;
+            margin-top: 2px;
+            cursor: pointer;
+        }
+        .skill-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .skill-toggle-track {
+            position: absolute;
+            inset: 0;
+            background: #1f2937;
+            border-radius: 8px;
+            border: 1px solid #374151;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .skill-toggle-thumb {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            left: 2px;
+            top: 2px;
+            background: #4b5563;
+            border-radius: 50%;
+            transition: transform 0.15s, background 0.15s;
+        }
+        .skill-toggle input:checked ~ .skill-toggle-track {
+            background: #1d4ed8;
+            border-color: #2563eb;
+        }
+        .skill-toggle input:checked ~ .skill-toggle-thumb {
+            transform: translateX(12px);
+            background: #fff;
+        }
+
+        /* Category-level toggle (slightly larger) */
+        .cat-toggle {
+            position: relative;
+            display: inline-block;
+            width: 26px;
+            height: 14px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .cat-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .cat-toggle-track {
+            position: absolute;
+            inset: 0;
+            background: #1f2937;
+            border-radius: 7px;
+            border: 1px solid #374151;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .cat-toggle-thumb {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            left: 2px;
+            top: 2px;
+            background: #4b5563;
+            border-radius: 50%;
+            transition: transform 0.15s, background 0.15s;
+        }
+        .cat-toggle input:checked ~ .cat-toggle-track {
+            background: #1d4ed8;
+            border-color: #2563eb;
+        }
+        .cat-toggle input:checked ~ .cat-toggle-thumb {
+            transform: translateX(12px);
+            background: #fff;
+        }
+        .cat-toggle input:indeterminate ~ .cat-toggle-track {
+            background: #1e3a8a;
+            border-color: #1d4ed8;
+        }
+        .cat-toggle input:indeterminate ~ .cat-toggle-thumb {
+            transform: translateX(6px);
+            background: #93c5fd;
+        }
+
+        /* Skills open panel button in chat header */
+        .skills-open-btn {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            border: 1px solid rgba(55,65,81,0.4);
+            background: transparent;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .skills-open-btn:hover { background: #1f2937; color: #d1d5db; border-color: #4b5563; }
+        .skills-open-btn.active { background: #1e3a8a; color: #93c5fd; border-color: #1d4ed8; }
+
+        /* Skills counter badge */
+        .skills-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 16px;
+            height: 16px;
+            padding: 0 4px;
+            border-radius: 8px;
+            background: #ea580c;
+            color: #fff7ed;
+            font-size: 0.6rem;
+            font-weight: 700;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .skills-badge.all-off { background: #374151; color: #9ca3af; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col overflow-hidden">
+
+<!-- ===== AUTH SCREEN ===== -->
+<div id="auth-screen" class="flex-1 flex items-center justify-center p-4">
+    <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-700/50 overflow-hidden">
+
+        <!-- Logo -->
+        <div class="px-8 pt-8 pb-4 text-center">
+            <div class="inline-flex w-11 h-11 items-center justify-center rounded-xl bg-blue-600/20 mb-3">
+                <svg class="w-5 h-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+            </div>
+            <h1 class="text-xl font-bold text-white">EZ Coworker</h1>
+            <p class="text-gray-500 text-sm mt-1">Your Coworker with Ninja skills</p>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-700 px-8">
+            <button id="tab-login" class="auth-tab active flex-1 py-3 text-sm font-medium" onclick="switchTab('login')">Sign In</button>
+            <button id="tab-register" class="auth-tab flex-1 py-3 text-sm font-medium" onclick="switchTab('register')">Register</button>
+        </div>
+
+        <!-- Form -->
+        <div class="px-8 py-6">
+            <input type="email" id="email" placeholder="Email address"
+                class="w-full mb-3 px-4 py-2.5 rounded-lg bg-gray-700/70 border border-gray-600/60 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/40 outline-none text-sm transition placeholder-gray-500"
+                onkeydown="if(event.key==='Enter') handleAuth()">
+            <input type="password" id="password" placeholder="Password"
+                class="w-full mb-4 px-4 py-2.5 rounded-lg bg-gray-700/70 border border-gray-600/60 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/40 outline-none text-sm transition placeholder-gray-500"
+                onkeydown="if(event.key==='Enter') handleAuth()">
+            <button id="auth-btn" onclick="handleAuth()"
+                class="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition text-sm">
+                Sign In
+            </button>
+            <p id="auth-error" class="text-red-400 text-xs mt-3 text-center hidden"></p>
+        </div>
+    </div>
+</div>
+
+<!-- ===== CHAT SCREEN ===== -->
+<div id="chat-screen" class="hidden flex-1 flex overflow-hidden">
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <!-- Sidebar -->
+    <div id="app-sidebar" class="w-56 flex-shrink-0 flex flex-col anim-in-1" style="background:var(--bg-panel);border-right:1px solid var(--border-subtle);">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between px-3 py-3" style="border-bottom:1px solid var(--border-subtle);">
+            <div class="flex items-center gap-2 min-w-0">
+                <img src="image.png" class="w-4 h-4 rounded-sm flex-shrink-0 object-contain" alt="EZ Coworker">
+                <span class="text-sm font-semibold truncate" style="color:var(--text-primary);font-family:'Outfit',sans-serif;letter-spacing:-0.01em;">EZ Coworker</span>
+            </div>
+            <button onclick="newConversation()" title="New conversation"
+                class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition"
+                style="color:var(--text-muted);" onmouseover="this.style.color='var(--text-primary)';this.style.background='var(--bg-surface)'" onmouseout="this.style.color='var(--text-muted)';this.style.background=''">
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Conversation list -->
+        <div id="conv-list" class="flex-1 overflow-y-auto py-1"></div>
+
+        <!-- Footer: user info + logout -->
+        <div class="flex items-center gap-2 px-3 py-2.5 border-t border-gray-700/50">
+            <div class="w-6 h-6 rounded-full bg-blue-600/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-3.5 h-3.5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                </svg>
+            </div>
+            <span id="user-email" class="text-xs text-gray-500 truncate flex-1">user</span>
+            <button onclick="logout()" title="Sign out"
+                class="flex-shrink-0 text-gray-600 hover:text-gray-300 transition">
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main chat -->
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0 anim-in-2">
+
+        <!-- Chat header: title + share button -->
+        <div id="chat-header" class="hidden items-center gap-2 px-4 py-2.5 border-b border-gray-700/30" style="background:rgba(14,21,37,0.8);min-height:44px;">
+            <button class="hamburger-btn" onclick="openSidebar()" aria-label="Open sidebar">
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+            </button>
+            <div class="flex-1 min-w-0">
+                <span id="chat-title-display" class="text-sm font-medium truncate" style="color:var(--text-primary);cursor:pointer;" onclick="startRenameFromHeader()" title="Click to rename">New Conversation</span>
+            </div>
+            <button id="share-btn" onclick="openShareModal()" title="Share this conversation"
+                class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg border transition"
+                style="border-color:rgba(55,65,81,0.4);background:transparent;color:#6b7280;"
+                onmouseover="this.style.background='#1f2937';this.style.color='#60a5fa';this.style.borderColor='#1d4ed8'"
+                onmouseout="this.style.background='transparent';this.style.color='#6b7280';this.style.borderColor='rgba(55,65,81,0.4)'">
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages" class="flex-1 overflow-y-auto px-5 py-5 space-y-3"
+             role="log" aria-label="Conversation messages" aria-live="polite">
+        </div>
+
+        <!-- Scroll to bottom button -->
+        <button id="scroll-bottom-btn" class="scroll-bottom-btn" onclick="scrollToBottom()" aria-label="Scroll to bottom" title="Scroll to bottom">
+            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
+            </svg>
+        </button>
+
+        <!-- File Panel (all files) -->
+        <div id="file-panel" class="border-t border-gray-700/50 bg-gray-800/30 hidden">
+            <div class="max-w-2xl mx-auto px-4 py-2">
+                <button onclick="toggleFilePanel()" class="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition w-full">
+                    <svg id="file-panel-chevron" class="w-3 h-3 transition-transform" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
+                    <span>All Files</span>
+                    <span id="file-panel-count" class="text-gray-600">(0)</span>
+                </button>
+                <div id="file-panel-body" class="hidden mt-1.5 max-h-40 overflow-y-auto">
+                    <div id="file-panel-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Files Panel (files for current conversation) -->
+        <div id="chat-files-panel" class="chat-files-section hidden">
+            <div class="max-w-2xl mx-auto">
+                <div class="chat-files-header" onclick="toggleChatFilesBody()">
+                    <svg id="chat-files-chevron" class="w-2.5 h-2.5 transition-transform flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
+                    <svg class="w-3 h-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                    </svg>
+                    <span style="font-size:0.7rem;">Chat Files</span>
+                    <span id="chat-files-count" class="ml-auto" style="color:#374151;font-size:0.65rem;"></span>
+                </div>
+                <div id="chat-files-body" class="chat-files-body">
+                    <div id="chat-files-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model Switcher -->
+        <div class="border-t border-gray-700/30 bg-gray-800/50 px-4 py-1.5">
+            <div class="max-w-2xl mx-auto flex items-center gap-2">
+                <!-- Auto-select toggle -->
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <label class="auto-select-toggle" title="Auto mode: picks the best model based on your request complexity and enabled skills">
+                        <input type="checkbox" id="auto-select-cb" onchange="toggleAutoSelect(this.checked)">
+                        <span class="auto-select-track">
+                            <span class="auto-select-thumb"></span>
+                        </span>
+                    </label>
+                    <span class="text-xs font-medium" id="auto-select-label" style="color:#6b7280;transition:color 0.2s;">Auto</span>
+                </div>
+                <div class="text-gray-700" style="font-size:0.6rem">|</div>
+                <div class="relative flex-1">
+                    <button id="model-switcher-btn" onclick="toggleModelDropdown()"
+                        class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-700/30 border border-gray-600/30 hover:border-gray-500/50 transition-colors text-sm text-gray-400 hover:text-gray-300">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <span id="model-provider-badge" class="hidden text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0" style="font-size:0.6rem"></span>
+                            <span id="current-model-name" class="truncate">Loading...</span>
+                        </div>
+                        <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                        </svg>
+                    </button>
+
+                    <!-- Dropdown Menu -->
+                    <div id="model-dropdown" class="hidden absolute bottom-full mb-2 left-0 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl max-h-72 overflow-y-auto z-50">
+                        <div id="model-list" class="py-1">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+                <!-- Auto-routing indicator: shown briefly when auto picks a model -->
+                <div id="auto-route-indicator" class="hidden flex-shrink-0 text-xs px-2 py-0.5 rounded-full" style="background:#0c1f3f;color:#60a5fa;border:1px solid #1e3a8a;font-size:0.65rem;white-space:nowrap;"></div>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="border-t border-gray-700/50 bg-gray-800/50 px-4 pt-2.5 pb-3 relative">
+            <div class="max-w-2xl mx-auto">
+                <!-- File chips (pending uploads) -->
+                <div id="file-chips" class="flex flex-wrap gap-1.5 mb-2 hidden"></div>
+
+                <div class="flex items-end gap-1.5 bg-gray-750 rounded-xl border border-gray-600/40 focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/20 transition-all duration-150 pl-2 pr-1.5 py-1.5" style="background: rgba(55,65,81,0.45);">
+                    <!-- Attach button -->
+                    <button id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach files" aria-label="Attach files"
+                        class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-600/40 transition-colors">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                        </svg>
+                    </button>
+                    <input type="file" id="file-input" multiple class="hidden"
+                        accept=".js,.ts,.py,.java,.c,.cpp,.h,.cs,.go,.rs,.rb,.php,.swift,.kt,.dart,.r,.m,.sh,.sql,.html,.css,.json,.xml,.yaml,.yml,.vue,.jsx,.tsx,.svelte,.md,.txt,.doc,.docx,.pdf,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.svg,.webp,.bmp,.ico,.zip,.tar,.gz"
+                        onchange="handleFileSelect(this.files)">
+
+                    <textarea id="user-input" rows="1"
+                        placeholder="Ask your agent to do something…"
+                        class="flex-1 bg-transparent text-white text-sm outline-none resize-none placeholder-gray-500 leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed py-1"
+                        style="min-height: 22px; max-height: 160px;"
+                        oninput="autoResize(this); updateCharCounter()"
+                        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+                    <button id="send-btn" onclick="sendMessage()" aria-label="Send message"
+                        class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors">
+                        <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex items-center justify-between mt-1 text-xs text-gray-600 px-1">
+                    <span id="char-counter">0 chars · ~0 tokens</span>
+                    <span>Enter to send · Shift+Enter for newline · Ctrl+K for new chat</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SKILLS PANEL ===== -->
+    <div id="skills-panel" class="skills-panel anim-in-3">
+        <!-- Panel header: always visible, even when collapsed -->
+        <div class="skills-panel-header">
+            <button class="skills-panel-toggle-btn" onclick="toggleSkillsPanel()" title="Toggle Skills Panel">
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </button>
+            <div class="skills-header-content">
+                <span class="text-xs font-bold" style="color:#f97316;letter-spacing:0.04em;">⚡ EZ Skills</span>
+                <span id="skills-badge" class="skills-badge">0</span>
+            </div>
+        </div>
+        <!-- Panel body: hidden when collapsed -->
+        <div id="skills-panel-body" class="skills-panel-body">
+            <div id="skills-list" class="px-1 py-1">
+                <div class="text-xs text-gray-600 text-center py-4">Loading skills…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== FULL-SCREEN DRAG OVERLAY ===== -->
+<div id="drag-overlay" class="drag-overlay">
+    <div class="drag-overlay-inner">
+        <svg style="width:40px;height:40px;color:#3b82f6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+        </svg>
+        <span style="color:#60a5fa;font-size:1.1rem;font-weight:600;font-family:'Outfit',sans-serif;">Drop files to upload</span>
+        <span style="color:#4b5563;font-size:0.8rem;">Images, PDFs, documents, code files…</span>
+    </div>
+</div>
+
+<!-- ===== SHARE MODAL ===== -->
+<div id="share-modal" class="share-modal-overlay hidden" onclick="closeShareModal(event)">
+    <div class="share-modal" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold" style="color:var(--text-primary);">Share Conversation</h3>
+            <button onclick="closeShareModal()" class="text-gray-600 hover:text-gray-300 transition p-1 rounded">
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <p class="text-xs mb-4" style="color:var(--text-secondary);line-height:1.6;">
+            Anyone with this link can view this conversation (read-only). They don't need an account.
+        </p>
+        <div id="share-link-area" class="hidden">
+            <div class="flex gap-2 mb-3">
+                <input id="share-link-input" readonly
+                    class="flex-1 text-xs px-3 py-2 rounded-lg outline-none truncate"
+                    style="background:#0a1220;border:1px solid rgba(255,255,255,0.1);color:#93c5fd;">
+                <button id="share-copy-btn" onclick="copyShareLink()"
+                    class="px-3 py-2 rounded-lg text-xs font-medium transition"
+                    style="background:#1d4ed8;color:#dbeafe;">Copy</button>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-xs" style="color:#374151;">Link is active</span>
+                <button onclick="revokeShare()" class="text-xs hover:text-red-400 transition" style="color:#4b5563;">Revoke link</button>
+            </div>
+        </div>
+        <div id="share-generate-area">
+            <button id="share-generate-btn" onclick="generateShareLink()"
+                class="w-full py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"
+                style="background:#1d4ed8;color:#dbeafe;">
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                </svg>
+                Generate Share Link
+            </button>
+        </div>
+        <p id="share-error" class="hidden text-xs mt-2 text-red-400 text-center"></p>
+    </div>
+</div>
+
+<script>
+  // Load p5.js and the car art sketch
+  // p5.js CDN
+  const scriptP5 = document.createElement('script');
+  scriptP5.src = 'https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js';
+  scriptP5.defer = true;
+  document.head.appendChild(scriptP5);
+  // Load sketch after p5 is ready
+  scriptP5.onload = () => {
+    const sketch = document.createElement('script');
+    sketch.src = '/art/car_art.js';
+    sketch.defer = true;
+    document.body.appendChild(sketch);
+  };
+
+    const API_URL = (() => {
+        const loc = window.location;
+        // Backend deployed at:
+        return 'http://localhost:5000/api';
+    })();
+    let currentUser = JSON.parse(localStorage.getItem('claude_user'));
+    let currentConversationId = null;
+    let conversations = [];
+    let authTab = 'login';
+    let availableModels = [];
+    let currentModel = null;
+    let autoSelectEnabled = false;  // LLM router auto-select mode
+    let pendingFiles = []; // Files waiting to be uploaded with next message
+    let currentShareToken = null;   // Active share token for current conversation
+
+    // === STREAMING STATE ===
+    let isStreaming = false;           // True while an agent SSE stream is active
+    let _streamActivityTimer = null;  // Timer that fires when stream stalls (no events)
+    let _activeActivityId = null;     // Current activity panel ID (for stuck warning)
+    const STREAM_STALL_MS = 90 * 1000; // 90s with no SSE data = consider stream stuck
+
+    // === SKILLS STATE ===
+    let allSkills = [];            // [{name, description, category}]
+    let skillPreferences = {};     // {skillName: true/false}
+    let skillsPanelCollapsed = true;   // Skills panel starts collapsed — expand to use skills
+    let _saveSkillsTimer = null;   // Debounce timer for saving
+
+    const CATEGORY_ICONS = {
+        'Document & File Processing': '📄',
+        'Web & Frontend':             '🌐',
+        'Creative & Design':          '🎨',
+        'DevOps & Infrastructure':    '🔧',
+        'Testing & Quality':          '🧪',
+        'Communication & Docs':       '📝',
+        'Development Tools':          '🛠️',
+        'Business & Analytics':       '📊',
+        'Project Management':         '📋',
+        'Other':                      '⚙️',
+    };
+
+    // === STREAMING STATE HELPERS ===
+
+    /**
+     * Set the UI into streaming (agent is working) or idle (ready for input) mode.
+     * When streaming: input stays ENABLED so the user can always type a response.
+     *   The send button turns amber to signal "click to interrupt and send".
+     * When idle: restore normal blue send button.
+     */
+    function setStreamingState(streaming, activityId) {
+        isStreaming = streaming;
+        _activeActivityId = streaming ? activityId : null;
+        const btn = document.getElementById('send-btn');
+        const input = document.getElementById('user-input');
+
+        if (streaming) {
+            // Keep input enabled — user can always type
+            input.disabled = false;
+            input.placeholder = 'Type to interrupt and send a new message…';
+            // Switch button to amber "interrupt" style
+            if (btn) {
+                btn.disabled = false;
+                btn.style.background = '#d97706';
+                btn.title = 'Click to interrupt the agent and send your message';
+            }
+            resetStreamActivityTimer();
+        } else {
+            if (input) {
+                input.disabled = false;
+                input.placeholder = 'Ask your agent to do something…';
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.style.background = '';
+                btn.title = '';
+            }
+            clearTimeout(_streamActivityTimer);
+            removeStuckWarning();
+            if (input) input.focus();
+        }
+    }
+
+    /**
+     * Reset the inactivity timer. Call this every time an SSE event arrives.
+     * If no event arrives for STREAM_STALL_MS, we show a "stuck" warning.
+     */
+    function resetStreamActivityTimer() {
+        clearTimeout(_streamActivityTimer);
+        _streamActivityTimer = setTimeout(() => {
+            if (isStreaming) showStuckWarning();
+        }, STREAM_STALL_MS);
+    }
+
+    /** Show a warning below the activity panel that the agent appears stuck. */
+    function showStuckWarning() {
+        if (document.getElementById('stream-stuck-warning')) return; // already shown
+        const warn = document.createElement('div');
+        warn.id = 'stream-stuck-warning';
+        warn.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 12px;margin:6px 0;border-radius:8px;background:#451a03;border:1px solid #92400e;font-size:0.72rem;color:#fcd34d;animation:msgIn 0.2s ease-out;';
+        warn.innerHTML = `
+            <span>⚠️ Agent seems stuck (no response for 90s)</span>
+            <button onclick="recoverFromStuck()" style="padding:2px 10px;border-radius:4px;font-size:0.7rem;font-weight:500;cursor:pointer;border:none;background:#b45309;color:#fef3c7;transition:all 0.12s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#b45309'">Cancel &amp; Recover</button>
+        `;
+        // Append after the current activity panel or at the bottom of messages
+        const msgs = document.getElementById('messages');
+        if (msgs) msgs.appendChild(warn);
+    }
+
+    /** Remove the stuck warning if present. */
+    function removeStuckWarning() {
+        const warn = document.getElementById('stream-stuck-warning');
+        if (warn) warn.remove();
+    }
+
+    /**
+     * Cancel the current stream and fully restore UI to idle state.
+     * Called by the "Cancel & Recover" button and by interrupt-send.
+     */
+    async function recoverFromStuck() {
+        try {
+            await apiFetch(`${API_URL}/chat/stop`, { method: 'POST', headers: authHeaders() });
+        } catch (_) {}
+        setStreamingState(false);
+        // Mark the current activity panel as errored if present
+        if (_activeActivityId) {
+            const spinner = document.getElementById(`${_activeActivityId}-spinner`);
+            const title = document.getElementById(`${_activeActivityId}-title`);
+            const stopBtn = document.getElementById(`${_activeActivityId}-stop`);
+            if (spinner) spinner.classList.add('error');
+            if (title) { title.textContent = 'Agent cancelled'; title.className = 'activity-title error'; }
+            if (stopBtn) stopBtn.style.display = 'none';
+        }
+    }
+
+    // === MARKED RENDERER (code blocks with copy button) ===
+    const renderer = new marked.Renderer();
+    renderer.code = function(code, language) {
+        const lang = language ? escapeHtml(language) : '';
+        const src = escapeHtml(typeof code === 'object' ? code.text : code);
+        return `<div class="code-block-wrapper"><button class="copy-btn" onclick="copyCode(this)" aria-label="Copy code">Copy</button><pre class="language-${lang}"><code>${src}</code></pre></div>`;
+    };
+    marked.setOptions({ renderer });
+
+    // === INIT ===
+    if (currentUser && currentUser.token) showChat();
+
+    // === KEYBOARD SHORTCUTS ===
+    document.addEventListener('keydown', (e) => {
+        // Ctrl+K or Cmd+K: New conversation
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            if (currentUser && currentUser.token) newConversation();
+        }
+        // Escape: Clear input
+        if (e.key === 'Escape') {
+            const input = document.getElementById('user-input');
+            if (input && input.value.trim()) {
+                input.value = '';
+                autoResize(input);
+                updateCharCounter();
+            }
+        }
+    });
+
+    // === AUTH ===
+    function switchTab(tab) {
+        authTab = tab;
+        document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+        document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+        document.getElementById('auth-btn').textContent = tab === 'login' ? 'Sign In' : 'Create Account';
+        const err = document.getElementById('auth-error');
+        err.textContent = '';
+        err.classList.add('hidden');
+    }
+
+    async function handleAuth() {
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        if (!email || !password) return showAuthError('Please fill in all fields.');
+
+        const btn = document.getElementById('auth-btn');
+        btn.disabled = true;
+        btn.textContent = 'Please wait…';
+
+        try {
+            const res = await fetch(`${API_URL}/${authTab === 'login' ? 'login' : 'register'}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Authentication failed.');
+
+            const user = { token: data.token, userId: data.userId || data.id, email };
+            localStorage.setItem('claude_user', JSON.stringify(user));
+            currentUser = user;
+            showChat();
+        } catch (err) {
+            showAuthError(err.message);
+            btn.disabled = false;
+            btn.textContent = authTab === 'login' ? 'Sign In' : 'Create Account';
+        }
+    }
+
+    async function logout() {
+        try { await fetch(`${API_URL}/logout`, { method: 'POST', headers: authHeaders() }); } catch (_) {}
+        localStorage.removeItem('claude_user');
+        location.reload();
+    }
+
+    function showAuthError(msg) {
+        const el = document.getElementById('auth-error');
+        el.textContent = msg;
+        el.classList.remove('hidden');
+    }
+
+    function authHeaders() {
+        return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${currentUser.token}` };
+    }
+
+    async function apiFetch(url, options = {}) {
+        const res = await fetch(url, options);
+        if (res.status === 401) {
+            localStorage.removeItem('claude_user');
+            location.reload();
+            throw new Error('Session expired');
+        }
+        return res;
+    }
+
+    function showChat() {
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('chat-screen').classList.remove('hidden');
+        if (currentUser.email) document.getElementById('user-email').textContent = currentUser.email;
+        // Apply initial collapsed state (skills panel starts collapsed by default)
+        const _sp = document.getElementById('skills-panel');
+        if (_sp) _sp.classList.toggle('collapsed', skillsPanelCollapsed);
+        loadModels();
+        loadConversations();
+        setupScrollButton();
+        refreshFilePanel();
+        loadSkills();
+    }
+    // === MOBILE SIDEBAR ===
+    function openSidebar() {
+        const sidebar = document.getElementById('app-sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        if (sidebar) sidebar.classList.add('open');
+        if (overlay) overlay.classList.add('visible');
+    }
+    function closeSidebar() {
+        const sidebar = document.getElementById('app-sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        if (sidebar) sidebar.classList.remove('open');
+        if (overlay) overlay.classList.remove('visible');
+    }
+
+    // === SCROLL TO BOTTOM ===
+    function setupScrollButton() {
+        const container = document.getElementById('messages');
+        const btn = document.getElementById('scroll-bottom-btn');
+        if (!container || !btn) return;
+
+        container.addEventListener('scroll', () => {
+            const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+            btn.classList.toggle('visible', !isAtBottom);
+        });
+    }
+
+    function scrollToBottom() {
+        const container = document.getElementById('messages');
+        if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    }
+
+    // === CONVERSATIONS ===
+    async function loadConversations() {
+        try {
+            const res = await apiFetch(`${API_URL}/conversations`, { headers: authHeaders() });
+            if (!res.ok) { showConvError('Failed to load.'); return; }
+            const data = await res.json();
+            conversations = data.conversations;
+            renderConvList();
+            if (conversations.length > 0) await loadConversation(conversations[0].id);
+            else showWelcome();
+        } catch (_) {
+            showConvError('Server unreachable.');
+        }
+    }
+
+    function showConvError(msg) {
+        document.getElementById('conv-list').innerHTML =
+            `<p class="text-red-400/80 text-xs p-4 text-center">${escapeHtml(msg)}</p>`;
+    }
+
+    function renderConvList() {
+        const list = document.getElementById('conv-list');
+        if (conversations.length === 0) {
+            list.innerHTML = `<p class="text-gray-600 text-xs p-4 text-center">No conversations yet.</p>`;
+            return;
+        }
+        list.innerHTML = '';
+        for (const conv of conversations) {
+            const el = document.createElement('div');
+            el.className = `conv-item flex items-center gap-1.5 px-3 py-2.5 ${conv.id === currentConversationId ? 'active' : ''}`;
+            el.dataset.convId = String(conv.id);
+            el.innerHTML = `
+                <div class="flex-1 min-w-0 pt-px" id="conv-title-area-${conv.id}">
+                    <div class="text-xs font-medium text-gray-300 truncate leading-5">${escapeHtml(conv.title)}</div>
+                    <div class="text-xs text-gray-600 mt-0.5">${relativeTime(conv.updated_at)}</div>
+                </div>
+                <div class="conv-actions">
+                    <button class="conv-action-btn share" onclick="openShareModalForConv(event,${conv.id})" title="Share">
+                        <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                        </svg>
+                    </button>
+                    <button class="conv-action-btn" onclick="startRename(event,${conv.id})" title="Rename">
+                        <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                        </svg>
+                    </button>
+                    <button class="conv-action-btn del" onclick="deleteConversation(event,${conv.id})" title="Delete">
+                        <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>`;
+            el.onclick = (e) => {
+                if (e.target.closest('.conv-actions') || e.target.closest('.conv-rename-input')) return;
+                loadConversation(conv.id);
+            };
+            list.appendChild(el);
+        }
+    }
+
+    // === RENAME CONVERSATION ===
+    function startRename(e, convId) {
+        e.stopPropagation();
+        const area = document.getElementById(`conv-title-area-${convId}`);
+        if (!area) return;
+        const conv = conversations.find(c => c.id === convId);
+        if (!conv) return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'conv-rename-input';
+        input.value = conv.title;
+        input.onclick = e => e.stopPropagation();
+        input.onkeydown = async (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); await commitRename(convId, input.value, area, conv); }
+            if (e.key === 'Escape') { renderConvList(); }
+        };
+        input.onblur = () => setTimeout(() => commitRename(convId, input.value, area, conv), 150);
+        area.innerHTML = '';
+        area.appendChild(input);
+        input.focus();
+        input.select();
+    }
+
+    function startRenameFromHeader() {
+        if (!currentConversationId) return;
+        startRename({ stopPropagation: () => {} }, currentConversationId);
+    }
+
+    async function commitRename(convId, newTitle, area, conv) {
+        const title = (newTitle || '').trim();
+        if (!title || title === conv.title) { renderConvList(); return; }
+        try {
+            const res = await apiFetch(`${API_URL}/conversations/${convId}/title`, {
+                method: 'PATCH',
+                headers: authHeaders(),
+                body: JSON.stringify({ title })
+            });
+            if (res.ok) {
+                conv.title = title;
+                if (convId === currentConversationId) updateChatHeader(convId);
+            }
+        } catch (_) {}
+        renderConvList();
+    }
+
+    async function deleteConversation(e, convId) {
+        e.stopPropagation();
+        conversations = conversations.filter(c => c.id !== convId);
+        renderConvList();
+        if (currentConversationId === convId) {
+            currentConversationId = null;
+            if (conversations.length > 0) await loadConversation(conversations[0].id);
+            else showWelcome();
+        }
+        fetch(`${API_URL}/conversations/${convId}`, { method: 'DELETE', headers: authHeaders() }).catch(() => {});
+    }
+
+    async function loadConversation(convId) {
+        currentConversationId = convId;
+        currentShareToken = null;
+        document.querySelectorAll('.conv-item').forEach(el =>
+            el.classList.toggle('active', el.dataset.convId === String(convId)));
+
+        updateChatHeader(convId);
+
+        const container = document.getElementById('messages');
+        container.innerHTML = '';
+        try {
+            const res = await apiFetch(`${API_URL}/conversations/${convId}/messages`, { headers: authHeaders() });
+            if (!res.ok) {
+                container.innerHTML = `<div class="text-red-400/80 text-sm text-center mt-12">Failed to load messages.</div>`;
+                return;
+            }
+            const data = await res.json();
+            if (data.messages.length === 0) { showWelcome(); return; }
+            for (const msg of data.messages) addMessage(msg.role, msg.content, msg.created_at, msg.metadata);
+            document.getElementById('user-input').focus();
+        } catch (_) {
+            container.innerHTML = `<div class="text-red-400/80 text-sm text-center mt-12">Could not connect to server.</div>`;
+        }
+
+        // Load chat-specific files
+        loadChatFiles(convId);
+    }
+
+    function updateChatHeader(convId) {
+        const conv = conversations.find(c => c.id === convId);
+        const header = document.getElementById('chat-header');
+        const titleEl = document.getElementById('chat-title-display');
+        if (header) header.classList.remove('hidden');
+        if (header) header.style.display = 'flex';
+        if (titleEl && conv) titleEl.textContent = conv.title;
+    }
+
+    function showWelcome() {
+        document.getElementById('messages').innerHTML = `
+            <div id="welcome" class="flex flex-col items-center justify-center h-full text-center pb-8">
+                <div class="w-12 h-12 rounded-2xl bg-blue-600/15 flex items-center justify-center mb-4">
+                    <svg class="w-6 h-6 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.3" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                    </svg>
+                </div>
+                <h2 class="text-base font-semibold text-gray-200 mb-1.5">How can I help?</h2>
+                <p class="text-gray-500 text-sm mb-7 max-w-xs leading-relaxed">I run locally on your machine. Ask me to write, explain, or debug code.</p>
+                <div class="grid grid-cols-2 gap-2 w-full max-w-xs">
+                    ${['Explain a piece of code', 'Write a Python script', 'Debug this error', 'Review my function'].map(s =>
+                        `<button onclick="fillSuggestion('${s}')"
+                            class="text-left px-3 py-2.5 rounded-lg border border-gray-700 hover:border-gray-600 hover:bg-gray-800 text-xs text-gray-400 hover:text-gray-200 transition leading-snug">${s}</button>`
+                    ).join('')}
+                </div>
+            </div>`;
+    }
+
+    function fillSuggestion(text) {
+        const inp = document.getElementById('user-input');
+        inp.value = text;
+        autoResize(inp);
+        updateCharCounter();
+        inp.focus();
+    }
+
+    function newConversation() {
+        currentConversationId = null;
+        currentShareToken = null;
+        document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+        // Hide chat header and files panel for new chat
+        const header = document.getElementById('chat-header');
+        if (header) header.style.display = 'none';
+        const chatFiles = document.getElementById('chat-files-panel');
+        if (chatFiles) chatFiles.classList.add('hidden');
+        chatFilesOpen = false;
+        const cfBody = document.getElementById('chat-files-body');
+        const cfChev = document.getElementById('chat-files-chevron');
+        if (cfBody) cfBody.classList.remove('open');
+        if (cfChev) cfChev.style.transform = '';
+        showWelcome();
+        document.getElementById('user-input').focus();
+    }
+
+    // === UTILS ===
+    function escapeHtml(text) {
+        const d = document.createElement('div');
+        d.textContent = String(text);
+        return d.innerHTML;
+    }
+
+    function relativeTime(s) {
+        const m = Math.floor((Date.now() - new Date(s)) / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return `${m}m ago`;
+        const h = Math.floor(m / 60);
+        if (h < 24) return `${h}h ago`;
+        const d = Math.floor(h / 24);
+        if (d < 7) return `${d}d ago`;
+        return new Date(s).toLocaleDateString();
+    }
+
+    function autoResize(el) {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+    }
+
+    function updateCharCounter() {
+        const input = document.getElementById('user-input');
+        const counter = document.getElementById('char-counter');
+        if (!input || !counter) return;
+        const len = input.value.length;
+        const tokens = Math.ceil(len / 4); // rough estimate: ~4 chars per token
+        counter.textContent = `${len} chars · ~${tokens} tokens`;
+        // Warn if approaching limit (32KB = 32768 chars)
+        if (len > 30000) {
+            counter.classList.add('text-yellow-500');
+        } else if (len > 32000) {
+            counter.classList.add('text-red-500');
+            counter.classList.remove('text-yellow-500');
+        } else {
+            counter.classList.remove('text-yellow-500', 'text-red-500');
+        }
+    }
+
+    /**
+     * Copy text to clipboard with fallback for non-secure contexts (HTTP).
+     * navigator.clipboard.writeText() requires HTTPS or localhost.
+     * Falls back to document.execCommand('copy') on plain HTTP.
+     */
+    function copyToClipboard(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            return navigator.clipboard.writeText(text);
+        }
+        // Fallback for HTTP: use a temporary textarea + execCommand
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        try {
+            document.execCommand('copy');
+        } catch (e) {
+            console.warn('Copy failed:', e);
+        }
+        document.body.removeChild(textarea);
+        return Promise.resolve();
+    }
+
+    function copyCode(btn) {
+        const code = btn.nextElementSibling.querySelector('code').innerText;
+        copyToClipboard(code).then(() => {
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+        });
+    }
+
+    function formatTimestamp(isoString) {
+        const date = new Date(isoString);
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${hours}:${minutes}`;
+    }
+
+    function copyMessage(bubble) {
+        const content = bubble.dataset.content;
+        if (!content) return;
+        copyToClipboard(content).then(() => {
+            // Show brief visual feedback on the copy button
+            const copyBtn = bubble.parentElement.querySelector('.msg-actions button');
+            if (copyBtn) {
+                const originalHTML = copyBtn.innerHTML;
+                copyBtn.innerHTML = `<span style="font-size:0.7rem;color:#10b981;">✓ Copied</span>`;
+                setTimeout(() => { copyBtn.innerHTML = originalHTML; }, 2000);
+            }
+        });
+    }
+
+    function regenerateResponse(msgId) {
+        // Find the user message before this assistant message
+        const assistantBubble = document.getElementById(msgId);
+        if (!assistantBubble) return;
+
+        const messageWrapper = assistantBubble.closest('.message-wrapper');
+        let prevUserMsg = null;
+        let prev = messageWrapper.previousElementSibling;
+        while (prev) {
+            if (prev.querySelector('.bg-blue-600')) {
+                prevUserMsg = prev.querySelector('.bg-blue-600').textContent;
+                break;
+            }
+            prev = prev.previousElementSibling;
+        }
+
+        if (!prevUserMsg) return;
+
+        // Remove the assistant message and resend
+        messageWrapper.remove();
+        const input = document.getElementById('user-input');
+        input.value = prevUserMsg;
+        sendMessage();
+    }
+
+    // === MODEL SWITCHER + AUTO-SELECT ===
+
+    // Provider badge colors
+    const PROVIDER_COLORS = {
+        anthropic: { bg: '#1a0a2e', color: '#c084fc', border: '#7c3aed' },
+        openai:    { bg: '#0a1f10', color: '#4ade80', border: '#16a34a' },
+        google:    { bg: '#0a1828', color: '#60a5fa', border: '#2563eb' },
+        groq:      { bg: '#1a1400', color: '#fbbf24', border: '#d97706' },
+        openrouter:{ bg: '#1a0e0a', color: '#fb923c', border: '#ea580c' },
+        ollama:    { bg: '#111827', color: '#9ca3af', border: '#374151' },
+    };
+
+    async function loadModels() {
+        try {
+            const modelsRes = await apiFetch(`${API_URL}/models`, { headers: authHeaders() });
+            if (!modelsRes.ok) return;
+            const modelsData = await modelsRes.json();
+            availableModels = modelsData.models || [];
+
+            const currentRes = await apiFetch(`${API_URL}/models/current`, { headers: authHeaders() });
+            if (currentRes.ok) {
+                const currentData = await currentRes.json();
+                currentModel = currentData.model;
+                autoSelectEnabled = currentData.auto_select || false;
+                updateAutoSelectUI();
+                updateModelDisplay();
+            }
+            renderModelDropdown();
+        } catch (err) {
+            console.error('Error loading models:', err);
+        }
+    }
+
+    function updateModelDisplay(modelOverride) {
+        const m = modelOverride || currentModel;
+        const nameEl = document.getElementById('current-model-name');
+        const badge = document.getElementById('model-provider-badge');
+        if (!nameEl) return;
+        if (autoSelectEnabled && !modelOverride) {
+            nameEl.textContent = 'Auto';
+            if (badge) badge.classList.add('hidden');
+            return;
+        }
+        if (m) {
+            nameEl.textContent = m.name;
+            if (badge) {
+                const p = (m.provider || 'ollama').toLowerCase();
+                const colors = PROVIDER_COLORS[p] || PROVIDER_COLORS.ollama;
+                badge.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+                badge.style.background = colors.bg;
+                badge.style.color = colors.color;
+                badge.style.border = `1px solid ${colors.border}`;
+                badge.classList.remove('hidden');
+            }
+        }
+    }
+
+    function updateAutoSelectUI() {
+        const cb = document.getElementById('auto-select-cb');
+        const label = document.getElementById('auto-select-label');
+        const switcher = document.getElementById('model-switcher-btn');
+        if (cb) cb.checked = autoSelectEnabled;
+        if (label) {
+            label.style.color = autoSelectEnabled ? '#818cf8' : '#6b7280';
+            label.textContent = autoSelectEnabled ? 'Auto ✦' : 'Auto';
+        }
+        if (switcher) {
+            switcher.style.opacity = autoSelectEnabled ? '0.55' : '1';
+            switcher.title = autoSelectEnabled ? 'Auto mode active — disable Auto to pick manually' : '';
+        }
+        updateModelDisplay();
+    }
+
+    async function toggleAutoSelect(enabled) {
+        autoSelectEnabled = enabled;
+        updateAutoSelectUI();
+        try {
+            await apiFetch(`${API_URL}/models/auto-select/toggle`, {
+                method: 'PUT',
+                headers: authHeaders(),
+                body: JSON.stringify({ enabled })
+            });
+        } catch (_) {}
+    }
+
+    /**
+     * Called before sending a message when auto-select is on.
+     * Asks the backend router for the best model and temporarily applies it.
+     * Shows a brief indicator to the user.
+     */
+    async function autoRouteModel(message, enabledSkills) {
+        try {
+            const res = await apiFetch(`${API_URL}/models/auto-select`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ message, enabledSkills })
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data.modelId) return;
+
+            // Temporarily set the model for this request
+            const m = availableModels.find(x => x.id === data.modelId);
+            if (!m) return;
+
+            // Apply on backend (select without disabling auto)
+            await apiFetch(`${API_URL}/models/select`, {
+                method: 'PUT',
+                headers: authHeaders(),
+                body: JSON.stringify({ modelId: data.modelId })
+            });
+            currentModel = m;
+
+            // Show brief indicator
+            const indicator = document.getElementById('auto-route-indicator');
+            if (indicator) {
+                const tierLabels = { 1: '⚡ Fast', 2: '🔬 Smart', 3: '🚀 Advanced' };
+                const p = (m.provider || '').toLowerCase();
+                const colors = PROVIDER_COLORS[p] || PROVIDER_COLORS.ollama;
+                indicator.textContent = `${tierLabels[data.tier] || '🤖'} ${m.name}`;
+                indicator.style.background = colors.bg;
+                indicator.style.color = colors.color;
+                indicator.style.borderColor = colors.border;
+                indicator.classList.remove('hidden');
+                clearTimeout(indicator._timer);
+                indicator._timer = setTimeout(() => indicator.classList.add('hidden'), 5000);
+            }
+        } catch (_) {}
+    }
+
+    function renderModelDropdown() {
+        const list = document.getElementById('model-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        // Refresh button
+        const refreshItem = document.createElement('div');
+        refreshItem.className = 'flex items-center gap-2 px-4 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-700/50 transition';
+        refreshItem.innerHTML = `
+            <svg id="sync-icon" class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            <span class="text-xs text-blue-400 font-medium">Refresh Models</span>
+        `;
+        refreshItem.onclick = async (e) => {
+            e.stopPropagation();
+            const icon = refreshItem.querySelector('#sync-icon');
+            const label = refreshItem.querySelector('span');
+            icon.style.animation = 'spin 0.7s linear infinite';
+            label.textContent = 'Syncing...';
+            try {
+                const res = await apiFetch(`${API_URL}/models/sync`, { method: 'POST', headers: authHeaders() });
+                const data = await res.json();
+                label.textContent = res.ok ? (data.message || 'Synced!') : (data.error || 'Sync failed');
+                label.style.color = res.ok ? '#10b981' : '#f87171';
+                if (res.ok) await loadModels();
+            } catch (_) { label.textContent = 'Sync failed'; label.style.color = '#f87171'; }
+            icon.style.animation = '';
+            setTimeout(() => { label.textContent = 'Refresh Models'; label.style.color = ''; }, 2000);
+        };
+        list.appendChild(refreshItem);
+
+        if (availableModels.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'px-4 py-3 text-xs text-gray-500 text-center';
+            empty.textContent = 'No models available. Click Refresh.';
+            list.appendChild(empty);
+            return;
+        }
+
+        // Group by provider
+        const groups = {};
+        for (const m of availableModels) {
+            const p = (m.provider || 'other').toLowerCase();
+            if (!groups[p]) groups[p] = [];
+            groups[p].push(m);
+        }
+
+        const providerOrder = ['anthropic', 'openai', 'google', 'groq', 'openrouter', 'ollama'];
+        const sortedProviders = Object.keys(groups).sort((a, b) => {
+            const ai = providerOrder.indexOf(a), bi = providerOrder.indexOf(b);
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        });
+
+        for (const provider of sortedProviders) {
+            const colors = PROVIDER_COLORS[provider] || PROVIDER_COLORS.ollama;
+            // Provider header
+            const hdr = document.createElement('div');
+            hdr.className = 'px-3 py-1.5 flex items-center gap-2';
+            hdr.innerHTML = `<span class="text-xs font-semibold uppercase tracking-wider" style="color:${colors.color};font-size:0.6rem;">${provider}</span><div style="flex:1;height:1px;background:${colors.border}22;"></div>`;
+            list.appendChild(hdr);
+
+            for (const model of groups[provider]) {
+                const isSelected = model.id === currentModel?.id;
+                const item = document.createElement('div');
+                item.className = `model-item px-4 py-2 ${isSelected ? 'selected' : ''}`;
+                item.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <div class="text-sm font-medium text-gray-200 flex-1 truncate">${escapeHtml(model.name)}</div>
+                        ${isSelected ? `<svg class="w-3 h-3 flex-shrink-0" style="color:${colors.color}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>` : ''}
+                    </div>
+                    ${model.description ? `<div class="text-xs text-gray-500 mt-0.5 truncate">${escapeHtml(model.description)}</div>` : ''}
+                    ${model.requires_api_key ? `<div class="text-xs text-yellow-600 mt-0.5">⚠ Requires API key</div>` : ''}
+                `;
+                item.onclick = () => selectModel(model.id);
+                list.appendChild(item);
+            }
+        }
+    }
+
+    function toggleModelDropdown() {
+        if (autoSelectEnabled) return; // Don't open when auto is on
+        const dropdown = document.getElementById('model-dropdown');
+        if (!dropdown) return;
+        dropdown.classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('model-dropdown');
+        const btn = document.getElementById('model-switcher-btn');
+        if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+
+    async function selectModel(modelId) {
+        const model = availableModels.find(m => m.id === modelId);
+        if (!model) return;
+        try {
+            const res = await apiFetch(`${API_URL}/models/select`, {
+                method: 'PUT',
+                headers: authHeaders(),
+                body: JSON.stringify({ modelId })
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || 'Failed to select model');
+                return;
+            }
+            currentModel = model;
+            updateModelDisplay();
+            renderModelDropdown();
+            toggleModelDropdown();
+            const btn = document.getElementById('model-switcher-btn');
+            if (btn) { btn.style.borderColor = '#10b981'; setTimeout(() => { btn.style.borderColor = ''; }, 600); }
+        } catch (err) {
+            console.error('Error selecting model:', err);
+        }
+    }
+
+    // === CHAT ===
+
+    // ---- Activity Panel Helpers ----
+
+    /**
+     * Creates a streaming agent message bubble with an embedded collapsible
+     * activity panel for real-time thinking/working display.
+     * Returns { msgId, activityId, addStep, finalize }
+     */
+    function createStreamingMessage() {
+        const container = document.getElementById('messages');
+        const welcome = document.getElementById('welcome');
+        if (welcome) welcome.remove();
+
+        const wrap = document.createElement('div');
+        wrap.className = 'message-wrapper flex justify-start msg-in';
+
+        const inner = document.createElement('div');
+        inner.className = 'flex flex-col items-start max-w-[82%]';
+
+        // Label
+        const label = document.createElement('div');
+        label.className = 'flex items-center gap-2 text-xs text-gray-600 mb-1 px-1';
+        label.innerHTML = `<span>Agent</span><span>•</span><span class="text-gray-700">${formatTimestamp(new Date().toISOString())}</span>`;
+
+        // Activity panel (collapsible)
+        const activityId = 'activity-' + Date.now();
+        const activity = document.createElement('div');
+        activity.className = 'activity-panel w-full';
+        activity.id = activityId;
+        activity.style.minWidth = '320px';
+
+        activity.innerHTML = `
+            <div class="activity-header open" onclick="toggleActivity('${activityId}')">
+                <div class="activity-spinner" id="${activityId}-spinner"></div>
+                <span class="activity-title" id="${activityId}-title">Agent working...</span>
+                <span class="activity-meta" id="${activityId}-meta"></span>
+                <button class="stop-btn" id="${activityId}-stop" onclick="event.stopPropagation(); stopAgent('${activityId}')" title="Stop the agent">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                    Stop
+                </button>
+                <span class="activity-chevron open" id="${activityId}-chevron">▶</span>
+            </div>
+            <div class="activity-body open" id="${activityId}-body">
+                <div class="activity-steps" id="${activityId}-steps"></div>
+            </div>
+        `;
+
+        // Message bubble — visible immediately with live streaming text area
+        const msgId = 'msg-' + Date.now() + Math.random().toString(36).slice(2);
+        const bubble = document.createElement('div');
+        bubble.id = msgId;
+        bubble.className = 'bg-gray-800 border border-gray-700/50 px-4 py-3 rounded-2xl rounded-tl-sm text-sm';
+
+        // Streaming text area: fills up as agent_text/chunk events arrive
+        const streamDiv = document.createElement('div');
+        streamDiv.id = `${msgId}-stream`;
+        streamDiv.className = 'text-gray-400 text-xs leading-relaxed whitespace-pre-wrap font-mono max-h-48 overflow-y-auto';
+        streamDiv.style.display = 'none'; // shown when first text arrives
+        bubble.appendChild(streamDiv);
+
+        // Typing indicator (shown while waiting for first text)
+        const typingEl = document.createElement('div');
+        typingEl.id = `${msgId}-typing`;
+        typingEl.className = 'flex items-center gap-1.5';
+        typingEl.innerHTML = `<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>`;
+        bubble.appendChild(typingEl);
+
+        // Blinking cursor shown during streaming
+        const cursorEl = document.createElement('span');
+        cursorEl.id = `${msgId}-cursor`;
+        cursorEl.className = 'inline-block w-0.5 h-3 bg-blue-400 ml-0.5 align-middle rounded-sm';
+        cursorEl.style.cssText = 'animation: tdot 0.8s ease-in-out infinite; display: none;';
+        bubble.appendChild(cursorEl);
+
+        inner.appendChild(label);
+        inner.appendChild(activity);
+        inner.appendChild(bubble);
+        wrap.appendChild(inner);
+        container.appendChild(wrap);
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+
+        // Track last chunk line for deduplication
+        let lastChunkText = '';
+        let chunkCount = 0;
+
+        /**
+         * Add a step row to the activity panel.
+         * @param {string} type - 'thinking'|'chunk'|'tool_call'|'tool_result'|'error'
+         * @param {string} icon - emoji or symbol
+         * @param {string} text - display text
+         * @param {object} extra - { success: bool } for tool_result
+         */
+        function addStep(type, icon, text, extra = {}) {
+            const steps = document.getElementById(`${activityId}-steps`);
+            if (!steps) return;
+
+            // For chunks: update a live line instead of spamming rows
+            if (type === 'chunk') {
+                chunkCount++;
+                // Update or create a "live output" line
+                let liveLine = document.getElementById(`${activityId}-live`);
+                if (!liveLine) {
+                    liveLine = document.createElement('div');
+                    liveLine.id = `${activityId}-live`;
+                    liveLine.className = 'activity-live-line';
+                    steps.appendChild(liveLine);
+                }
+                // Trim to last meaningful part
+                const trimmed = text.replace(/\s+/g, ' ').trim();
+                if (trimmed) {
+                    liveLine.textContent = '› ' + (trimmed.length > 80 ? trimmed.substring(0, 80) + '…' : trimmed);
+                }
+                // Scroll activity body
+                const body = document.getElementById(`${activityId}-body`);
+                if (body) body.scrollTop = body.scrollHeight;
+                return;
+            }
+
+            // For all other types: clear live line and add a persistent step
+            const liveLine = document.getElementById(`${activityId}-live`);
+            if (liveLine) liveLine.remove();
+
+            const step = document.createElement('div');
+            let resultClass = '';
+            if (type === 'tool_result') resultClass = extra.success ? ' success' : ' fail';
+            step.className = `activity-step type-${type}${resultClass}`;
+
+            let iconHtml = icon || '•';
+            const displayText = text.length > 100 ? text.substring(0, 100) + '…' : text;
+            step.innerHTML = `<span class="activity-step-icon">${iconHtml}</span><span class="activity-step-text">${escapeHtml(displayText)}</span>`;
+            steps.appendChild(step);
+
+            // Auto-scroll body
+            const body = document.getElementById(`${activityId}-body`);
+            if (body) body.scrollTop = body.scrollHeight;
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        }
+
+        /**
+         * Add a plan status step — planner decisions, agent spawns, phase transitions.
+         * Subclass controls colour: agent-spawn | agent-done | synthesis | warn
+         */
+        function addPlanStep(icon, text, subclass) {
+            const steps = document.getElementById(`${activityId}-steps`);
+            if (!steps) return;
+            const liveLine = document.getElementById(`${activityId}-live`);
+            if (liveLine) liveLine.remove();
+            const step = document.createElement('div');
+            step.className = `activity-step type-plan_status${subclass ? ' ' + subclass : ''}`;
+            const displayText = text.length > 120 ? text.substring(0, 120) + '…' : text;
+            step.innerHTML = `<span class="activity-step-icon">${icon}</span><span class="activity-step-text">${escapeHtml(displayText)}</span>`;
+            steps.appendChild(step);
+            const body = document.getElementById(`${activityId}-body`);
+            if (body) body.scrollTop = body.scrollHeight;
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        }
+
+        /**
+         * Finalize the activity panel: mark done, update header, then collapse
+         * and reveal the final message bubble.
+         * @param {string} finalContent - The final reply text (or null for error)
+         * @param {number} elapsed - seconds elapsed
+         * @param {boolean} isError - whether this was an error
+         */
+        function finalize(finalContent, elapsed, isError = false) {
+            // Clear live line
+            const liveLine = document.getElementById(`${activityId}-live`);
+            if (liveLine) liveLine.remove();
+
+            const spinner = document.getElementById(`${activityId}-spinner`);
+            const title = document.getElementById(`${activityId}-title`);
+            const meta = document.getElementById(`${activityId}-meta`);
+            const header = activity.querySelector('.activity-header');
+            const chevron = document.getElementById(`${activityId}-chevron`);
+            const body = document.getElementById(`${activityId}-body`);
+
+            if (spinner) spinner.classList.add(isError ? 'error' : 'done');
+            if (title) {
+                title.textContent = isError ? 'Agent error' : 'Agent work';
+                title.className = `activity-title ${isError ? 'error' : 'done'}`;
+            }
+            if (meta && elapsed) meta.textContent = `${elapsed}s`;
+            if (header) {
+                header.classList.remove('open');
+                // Collapse the body
+                if (body) {
+                    body.classList.remove('open');
+                    body.classList.add('open'); // trigger reflow first
+                    setTimeout(() => {
+                        if (body) { body.classList.remove('open'); }
+                        if (chevron) { chevron.classList.remove('open'); }
+                        if (header) { header.classList.remove('open'); }
+                    }, 100);
+                }
+            }
+
+            if (finalContent) {
+                // After collapsing, show the real reply bubble
+                setTimeout(() => {
+                    bubble.style.display = '';
+                    bubble.className = 'bg-gray-800 border border-gray-700/50 text-gray-100 px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed msg-prose';
+                    bubble.innerHTML = parseContent(finalContent);
+                    bubble.dataset.content = finalContent;
+
+                    // Add action buttons
+                    const parent = bubble.parentElement;
+                    if (!parent.querySelector('.msg-actions')) {
+                        const actions = document.createElement('div');
+                        actions.className = 'msg-actions flex items-center gap-1 mt-1 px-1';
+
+                        const copyBtn = document.createElement('button');
+                        copyBtn.className = 'text-gray-600 hover:text-gray-300 transition p-1 rounded';
+                        copyBtn.title = 'Copy message';
+                        copyBtn.innerHTML = `<svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>`;
+                        copyBtn.onclick = () => copyMessage(bubble);
+                        actions.appendChild(copyBtn);
+
+                        const regenBtn = document.createElement('button');
+                        regenBtn.className = 'text-gray-600 hover:text-gray-300 transition p-1 rounded';
+                        regenBtn.title = 'Regenerate response';
+                        regenBtn.innerHTML = `<svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>`;
+                        regenBtn.onclick = () => regenerateResponse(msgId);
+                        actions.appendChild(regenBtn);
+                        parent.appendChild(actions);
+                    }
+
+                    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                }, 200);
+            } else if (isError) {
+                bubble.style.display = '';
+                bubble.className = 'text-red-400 text-sm px-1 py-1';
+                bubble.textContent = finalContent || 'An error occurred.';
+            }
+        }
+
+        /**
+         * Append live streaming text to the bubble as agent_text/chunk events arrive.
+         * Shows the streaming area and hides the typing indicator on first call.
+         */
+        function addLiveText(text) {
+            const streamArea = document.getElementById(`${msgId}-stream`);
+            const typing = document.getElementById(`${msgId}-typing`);
+            const cursor = document.getElementById(`${msgId}-cursor`);
+            if (!streamArea) return;
+            // On first text: hide typing dots, show streaming area + cursor
+            if (streamArea.style.display === 'none') {
+                streamArea.style.display = '';
+                if (typing) typing.style.display = 'none';
+                if (cursor) cursor.style.display = '';
+            }
+            streamArea.textContent += text;
+            streamArea.scrollTop = streamArea.scrollHeight;
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        }
+
+        return { msgId, activityId, addStep, addLiveText, finalize };
+    }
+
+    /** Toggle an activity panel open/closed */
+    function toggleActivity(activityId) {
+        const body = document.getElementById(`${activityId}-body`);
+        const chevron = document.getElementById(`${activityId}-chevron`);
+        const header = document.getElementById(activityId)?.querySelector('.activity-header');
+        if (!body) return;
+        const isOpen = body.classList.contains('open');
+        body.classList.toggle('open', !isOpen);
+        if (chevron) chevron.classList.toggle('open', !isOpen);
+        if (header) header.classList.toggle('open', !isOpen);
+    }
+
+    /**
+     * Parse SSE stream from the /api/chat/stream endpoint.
+     * Reads the response body as a stream, splits on SSE boundaries,
+     * and dispatches events to the activity panel.
+     */
+    async function readSSEStream(response, handlers) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                // Process complete SSE messages (separated by \n\n)
+                const messages = buffer.split('\n\n');
+                buffer = messages.pop(); // keep incomplete last message
+
+                for (const msg of messages) {
+                    // Ping/keep-alive comment resets the stall timer — the agent is still alive
+                    if (msg.startsWith(':')) { resetStreamActivityTimer(); continue; }
+                    if (!msg.trim()) continue;
+
+                    let event = 'message';
+                    let data = '';
+
+                    for (const line of msg.split('\n')) {
+                        if (line.startsWith('event:')) {
+                            event = line.slice(6).trim();
+                        } else if (line.startsWith('data:')) {
+                            data = line.slice(5).trim();
+                        }
+                    }
+
+                    if (!data) continue;
+
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (handlers[event]) handlers[event](parsed);
+                    } catch (e) {
+                        console.warn('SSE parse error:', e, data);
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('user-input');
+        const btn = document.getElementById('send-btn');
+        const message = input.value.trim();
+        const hasFiles = pendingFiles.length > 0;
+        if (!message && !hasFiles) return;
+
+        // === INTERRUPT & SEND: If agent is currently streaming, stop it first then
+        // send the user's new message (e.g., a reply to a follow-up question).
+        if (isStreaming) {
+            // Visually mark the running activity panel as cancelled
+            if (_activeActivityId) {
+                const spinner = document.getElementById(`${_activeActivityId}-spinner`);
+                const title  = document.getElementById(`${_activeActivityId}-title`);
+                const stopBt = document.getElementById(`${_activeActivityId}-stop`);
+                if (spinner) spinner.classList.add('error');
+                if (title)   { title.textContent = 'Interrupted by user'; title.className = 'activity-title error'; }
+                if (stopBt)  stopBt.style.display = 'none';
+            }
+            // Stop the backend stream (fire-and-forget — don't block the new send)
+            apiFetch(`${API_URL}/chat/stop`, { method: 'POST', headers: authHeaders() }).catch(() => {});
+            // Transition to idle so setStreamingState(true) below works cleanly
+            setStreamingState(false);
+            // Small pause to let the abort propagate before we start a new stream
+            await new Promise(r => setTimeout(r, 250));
+        }
+
+        // Capture current input and clear it immediately so the user sees feedback
+        input.value = '';
+        autoResize(input);
+        updateCharCounter();
+
+        // Upload pending files first (before setting streaming state, so button is available)
+        let uploadedFiles = null;
+        if (hasFiles) {
+            try {
+                uploadedFiles = await uploadPendingFiles();
+            } catch (err) {
+                input.value = message;
+                autoResize(input);
+                addMessage('assistant', 'Upload failed: ' + err.message);
+                return;
+            }
+        }
+
+        // Build display message with file context
+        let displayMsg = message;
+        if (uploadedFiles && uploadedFiles.length > 0) {
+            const fileNames = uploadedFiles.map(f => f.name).join(', ');
+            displayMsg = displayMsg ? `[Uploaded: ${fileNames}]\n${displayMsg}` : `Uploaded: ${fileNames}`;
+        }
+
+        // Build the actual message sent to the agent
+        let agentMessage = message;
+        if (uploadedFiles && uploadedFiles.length > 0) {
+            const fileList = uploadedFiles.map(f => f.name).join(', ');
+            const prefix = `[I've uploaded these files to input/: ${fileList}]`;
+            agentMessage = message ? `${prefix}\n${message}` : `${prefix}\nPlease acknowledge the uploaded files.`;
+        }
+
+        addMessage('user', displayMsg);
+
+        // Create the streaming message with activity panel
+        const { msgId, activityId, addStep, addLiveText, finalize } = createStreamingMessage();
+
+        // Enter streaming mode — input stays enabled with amber button
+        setStreamingState(true, activityId);
+
+        // Auto-route: pick best model if auto-select is on
+        const enabledSkillNames = getEnabledSkillNames();
+        if (autoSelectEnabled) {
+            await autoRouteModel(agentMessage, enabledSkillNames);
+        }
+
+        // Start the 30s notification timer (non-intrusive prompt below activity panel)
+        const activityEl = document.getElementById(activityId);
+        if (activityEl) startNotifyTimer(activityEl.parentElement);
+
+        try {
+            const res = await fetch(`${API_URL}/chat/stream`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ message: agentMessage, conversationId: currentConversationId, enabledSkills: enabledSkillNames })
+            });
+
+            if (res.status === 401) {
+                localStorage.removeItem('claude_user');
+                location.reload();
+                return;
+            }
+
+            if (!res.ok || !res.body) {
+                // Non-streaming fallback error
+                const errData = await res.json().catch(() => ({ error: 'Request failed' }));
+                finalize(null, null, true);
+                const errBubble = document.getElementById(msgId);
+                if (errBubble) {
+                    errBubble.style.display = '';
+                    errBubble.className = 'text-red-400 text-sm px-1 py-1';
+                    errBubble.textContent = errData.error || 'An error occurred.';
+                }
+                return;
+            }
+
+            let streamConversationId = null;
+
+            await readSSEStream(res, {
+                thinking: (data) => {
+                    resetStreamActivityTimer(); // Reset stall detector on every event
+                    addStep('thinking', data.icon || '•', data.text || '');
+                },
+                // Plan status — planner decisions, agent spawns, phase transitions
+                plan_status: (data) => {
+                    resetStreamActivityTimer();
+                    const text = data.text || '';
+                    // Classify for colour coding
+                    let subclass = '';
+                    if (text.startsWith('  Agent') || text.includes('Spawning agent')) subclass = 'agent-spawn';
+                    else if (text.includes('complete:') || text.includes('validated'))  subclass = 'agent-done';
+                    else if (text.includes('synthesis') || text.includes('Synthesis') || text.includes('🔀')) subclass = 'synthesis';
+                    else if (text.includes('failed') || text.includes('unavailable') || text.includes('⚠️')) subclass = 'warn';
+                    addPlanStep(data.icon || '•', text, subclass);
+                },
+                // Live streaming text from the agent (both capable and Ollama models)
+                agent_text: (data) => {
+                    resetStreamActivityTimer();
+                    if (data.text) addLiveText(data.text);
+                },
+                // Legacy chunk events (may still arrive for Ollama fallback output)
+                chunk: (data) => {
+                    resetStreamActivityTimer();
+                    if (data.text && data.text.trim()) {
+                        addLiveText(data.text);
+                    }
+                },
+                tool_call: (data) => {
+                    resetStreamActivityTimer();
+                    if (data.name === 'Write') {
+                        addStep('tool_call', '📄', `Creating: ${data.path || ''}`);
+                    } else if (data.name === 'Bash') {
+                        addStep('tool_call', '⚡', `Running: ${data.command || ''}`);
+                    } else if (data.name === 'Read') {
+                        addStep('tool_call', '📖', `Reading: ${data.path || ''}`);
+                    } else if (data.name === 'List') {
+                        addStep('tool_call', '📂', `Listing: ${data.path || 'workspace'}`);
+                    } else if (data.name) {
+                        addStep('tool_call', '🔧', `${data.name}${data.args ? ': ' + data.args : ''}`);
+                    }
+                },
+                tool_result: (data) => {
+                    resetStreamActivityTimer();
+                    const ok = data.success !== false;
+                    if (data.name === 'Write') {
+                        addStep('tool_result', ok ? '✅' : '❌', ok ? `Created: ${data.path || ''}` : `Failed: ${data.path || ''} — ${data.error || ''}`, { success: ok });
+                    } else if (data.name === 'Bash') {
+                        addStep('tool_result', ok ? '✅' : '❌', ok ? `Done: ${data.command || ''}` : `Failed: ${data.command || ''} — ${data.error || ''}`, { success: ok });
+                    } else if (data.name === 'Read') {
+                        addStep('tool_result', ok ? '✅' : '❌', ok ? `Read: ${data.path || ''}` : `Failed: ${data.path || ''}`, { success: ok });
+                    }
+                },
+                done: (data) => {
+                    streamConversationId = data.conversationId;
+                    finalize(data.reply || 'No response received.', data.elapsed);
+
+                    // Add metadata bar (time + tokens) to the finalized live message
+                    if (data.elapsed != null || data.tokens) {
+                        setTimeout(() => {
+                            const bubble = document.getElementById(msgId);
+                            if (bubble) {
+                                const metaBar = buildMetadataBar({
+                                    elapsed_seconds: data.elapsed,
+                                    tokens: data.tokens
+                                });
+                                if (metaBar) {
+                                    const parent = bubble.parentElement;
+                                    if (parent) {
+                                        const actions = parent.querySelector('.msg-actions');
+                                        if (actions) parent.insertBefore(metaBar, actions);
+                                        else parent.appendChild(metaBar);
+                                    }
+                                }
+                            }
+                        }, 300);
+                    }
+
+                    refreshFilePanel();
+                    fireCompletionNotification(data.reply);
+
+                    // === FOLLOW-UP DETECTION ===
+                    // If the agent's reply ends with a question, auto-focus the input
+                    // and show a subtle prompt so the user knows they can reply.
+                    const reply = (data.reply || '').trim();
+                    const looksLikeQuestion =
+                        /\?\s*$/.test(reply) ||
+                        /\b(would you like|do you want|shall i|should i|can i|may i|want me to|need anything|let me know)\b/i.test(
+                            reply.substring(Math.max(0, reply.length - 300))
+                        );
+                    if (looksLikeQuestion) {
+                        setTimeout(() => {
+                            const inp = document.getElementById('user-input');
+                            if (inp) {
+                                inp.focus();
+                                // Brief placeholder hint, then restore default
+                                inp.placeholder = '💬 Type your answer…';
+                                setTimeout(() => {
+                                    if (inp.placeholder === '💬 Type your answer…')
+                                        inp.placeholder = 'Ask your agent to do something…';
+                                }, 6000);
+                            }
+                        }, 400);
+                    }
+                },
+                error: (data) => {
+                    addStep('error', '❌', data.message || 'An error occurred');
+                    finalize(null, null, true);
+                    fireCompletionNotification('Agent encountered an error: ' + (data.message || 'Unknown'));
+                    const errBubble = document.getElementById(msgId);
+                    if (errBubble) {
+                        errBubble.style.display = '';
+                        errBubble.className = 'text-red-400 text-sm px-1 mt-1 py-1';
+                        errBubble.textContent = data.message || 'An error occurred.';
+                    }
+                }
+            });
+
+            // Update sidebar for new conversations
+            if (streamConversationId && !currentConversationId) {
+                currentConversationId = streamConversationId;
+
+                // Retroactively link any files uploaded before this conversation existed
+                // (files uploaded on a new chat have no conversationId yet)
+                if (uploadedFiles && uploadedFiles.length > 0) {
+                    try {
+                        await apiFetch(`${API_URL}/conversations/${streamConversationId}/link-uploads`, {
+                            method: 'POST',
+                            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filenames: uploadedFiles.map(f => f.name) })
+                        });
+                    } catch (_) {}
+                }
+
+                const r = await apiFetch(`${API_URL}/conversations`, { headers: authHeaders() });
+                if (r.ok) {
+                    const d = await r.json();
+                    conversations = d.conversations;
+                    renderConvList();
+                    updateChatHeader(streamConversationId);
+                }
+                loadChatFiles(streamConversationId);
+            } else if (streamConversationId) {
+                // Refresh chat files after each response
+                loadChatFiles(streamConversationId);
+            }
+
+        } catch (err) {
+            console.error('Stream error:', err);
+            addStep('error', '❌', 'Connection error: ' + err.message);
+            finalize(null, null, true);
+            const errBubble = document.getElementById(msgId);
+            if (errBubble) {
+                errBubble.style.display = '';
+                errBubble.className = 'text-red-400 text-sm px-1 mt-1 py-1';
+                errBubble.textContent = 'Connection error. Please try again.';
+            }
+        } finally {
+            // Always restore idle state — ensures input is never permanently locked
+            setStreamingState(false);
+        }
+    }
+
+    /**
+     * Build a metadata info bar (time + token count) for an assistant message.
+     * @param {object} metadata - { elapsed_seconds, tokens: { total_tokens, estimated }, activity_steps }
+     * @returns {HTMLElement|null}
+     */
+    function buildMetadataBar(metadata) {
+        if (!metadata) return null;
+        const bar = document.createElement('div');
+        bar.className = 'flex items-center gap-2 mt-1 px-1';
+        bar.style.cssText = 'font-size:0.68rem;color:#374151;';
+
+        const parts = [];
+
+        if (metadata.elapsed_seconds != null) {
+            parts.push(`<span style="color:#1e3a5f;" title="Time to generate response">⏱ ${metadata.elapsed_seconds}s</span>`);
+        }
+
+        if (metadata.tokens) {
+            const t = metadata.tokens;
+            const total = t.total_tokens || (t.input_tokens || 0) + (t.output_tokens || 0);
+            if (total > 0) {
+                const isEstimated = t.estimated === true;
+                const breakdown = (!isEstimated && t.input_tokens != null && t.output_tokens != null)
+                    ? ` (in: ${t.input_tokens.toLocaleString()}, out: ${t.output_tokens.toLocaleString()})`
+                    : '';
+                const label = isEstimated ? `~${total.toLocaleString()} tokens` : `${total.toLocaleString()} tokens`;
+                parts.push(`<span style="color:#1e3a5f;" title="Tokens used${breakdown}">📊 ${label}${isEstimated ? '' : ''}</span>`);
+            }
+        }
+
+        if (parts.length === 0) return null;
+        bar.innerHTML = parts.join('<span style="color:#1f2937;">·</span>');
+        return bar;
+    }
+
+    /**
+     * Build a collapsed historical activity panel from saved steps.
+     * @param {Array} steps - [{type, icon, text, success?}]
+     * @param {number|null} elapsed - seconds
+     * @returns {HTMLElement}
+     */
+    function buildHistoricalActivityPanel(steps, elapsed) {
+        const activityId = 'hist-activity-' + Date.now() + Math.random().toString(36).slice(2);
+        const panel = document.createElement('div');
+        panel.className = 'activity-panel w-full';
+        panel.id = activityId;
+        panel.style.minWidth = '320px';
+
+        const elapsedStr = elapsed != null ? `${elapsed}s` : '';
+
+        panel.innerHTML = `
+            <div class="activity-header" id="${activityId}-hdr" onclick="toggleActivity('${activityId}')">
+                <div class="activity-spinner done" id="${activityId}-spinner"></div>
+                <span class="activity-title done" id="${activityId}-title">Agent work</span>
+                <span class="activity-meta">${escapeHtml(elapsedStr)}</span>
+                <span class="activity-chevron" id="${activityId}-chevron">▶</span>
+            </div>
+            <div class="activity-body" id="${activityId}-body">
+                <div class="activity-steps" id="${activityId}-steps"></div>
+            </div>
+        `;
+
+        if (steps && steps.length > 0) {
+            const stepsEl = panel.querySelector(`#${activityId}-steps`);
+            for (const step of steps) {
+                const stepEl = document.createElement('div');
+                let resultClass = '';
+                if (step.type === 'tool_result') resultClass = step.success !== false ? ' success' : ' fail';
+                stepEl.className = `activity-step type-${step.type || 'thinking'}${resultClass}`;
+                const displayText = (step.text || '').length > 120
+                    ? (step.text || '').substring(0, 120) + '…'
+                    : (step.text || '');
+                stepEl.innerHTML = `<span class="activity-step-icon">${step.icon || '•'}</span><span class="activity-step-text">${escapeHtml(displayText)}</span>`;
+                stepsEl.appendChild(stepEl);
+            }
+        } else {
+            const stepsEl = panel.querySelector(`#${activityId}-steps`);
+            stepsEl.innerHTML = '<div style="color:#374151;font-size:0.7rem;padding:0.25rem 0;">No detailed steps recorded</div>';
+        }
+
+        return panel;
+    }
+
+    function addMessage(role, content, timestamp = null, metadata = null) {
+        const container = document.getElementById('messages');
+        const welcome = document.getElementById('welcome');
+        if (welcome) welcome.remove();
+
+        const wrap = document.createElement('div');
+        wrap.className = `message-wrapper flex ${role === 'user' ? 'justify-end' : 'justify-start'} msg-in`;
+
+        const inner = document.createElement('div');
+        inner.className = `flex flex-col ${role === 'user' ? 'items-end' : 'items-start'} max-w-[80%]`;
+
+        // Label with timestamp
+        const label = document.createElement('div');
+        label.className = 'flex items-center gap-2 text-xs text-gray-600 mb-1 px-1';
+        const roleSpan = document.createElement('span');
+        roleSpan.textContent = role === 'user' ? 'You' : 'Agent';
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'text-gray-700';
+        timeSpan.textContent = timestamp ? formatTimestamp(timestamp) : formatTimestamp(new Date().toISOString());
+        label.appendChild(roleSpan);
+        label.appendChild(document.createTextNode('•'));
+        label.appendChild(timeSpan);
+
+        const bubble = document.createElement('div');
+        const msgId = 'msg-' + Date.now() + Math.random().toString(36).slice(2);
+        bubble.id = msgId;
+        bubble.dataset.content = content; // Store raw content for copying
+
+        if (role === 'user') {
+            bubble.className = 'bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed';
+            bubble.textContent = content;
+        } else {
+            bubble.className = 'bg-gray-800 border border-gray-700/50 text-gray-100 px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed msg-prose';
+            bubble.innerHTML = parseContent(content);
+        }
+
+        // Action buttons (copy, regenerate for assistant) + metadata bar
+        const actions = document.createElement('div');
+        actions.className = 'msg-actions flex items-center gap-1 mt-1 px-1';
+
+        // Copy button
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'text-gray-600 hover:text-gray-300 transition p-1 rounded';
+        copyBtn.title = 'Copy message';
+        copyBtn.innerHTML = `<svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+        </svg>`;
+        copyBtn.onclick = () => copyMessage(bubble);
+        actions.appendChild(copyBtn);
+
+        // Regenerate button (only for assistant messages)
+        if (role === 'assistant') {
+            const regenBtn = document.createElement('button');
+            regenBtn.className = 'text-gray-600 hover:text-gray-300 transition p-1 rounded';
+            regenBtn.title = 'Regenerate response';
+            regenBtn.innerHTML = `<svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>`;
+            regenBtn.onclick = () => regenerateResponse(msgId);
+            actions.appendChild(regenBtn);
+        }
+
+        inner.appendChild(label);
+
+        // For assistant messages: prepend historical activity panel if metadata has steps
+        if (role === 'assistant' && metadata) {
+            const steps = metadata.activity_steps;
+            const elapsed = metadata.elapsed_seconds;
+            // Show activity panel if there were steps OR if we have timing/token info
+            if ((steps && steps.length > 0) || elapsed != null) {
+                const histPanel = buildHistoricalActivityPanel(steps || [], elapsed);
+                inner.appendChild(histPanel);
+            }
+        }
+
+        inner.appendChild(bubble);
+
+        // Metadata bar (time + tokens) shown below the bubble for assistant messages
+        if (role === 'assistant' && metadata) {
+            const metaBar = buildMetadataBar(metadata);
+            if (metaBar) inner.appendChild(metaBar);
+        }
+
+        inner.appendChild(actions);
+        wrap.appendChild(inner);
+        container.appendChild(wrap);
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        return msgId;
+    }
+
+    function addLoadingMessage() {
+        const container = document.getElementById('messages');
+        const welcome = document.getElementById('welcome');
+        if (welcome) welcome.remove();
+
+        const wrap = document.createElement('div');
+        wrap.className = 'message-wrapper flex justify-start msg-in';
+
+        const inner = document.createElement('div');
+        inner.className = 'flex flex-col items-start';
+
+        // Label with timestamp
+        const label = document.createElement('div');
+        label.className = 'flex items-center gap-2 text-xs text-gray-600 mb-1 px-1';
+        const roleSpan = document.createElement('span');
+        roleSpan.textContent = 'Agent';
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'text-gray-700';
+        timeSpan.textContent = formatTimestamp(new Date().toISOString());
+        label.appendChild(roleSpan);
+        label.appendChild(document.createTextNode('•'));
+        label.appendChild(timeSpan);
+
+        const bubble = document.createElement('div');
+        const msgId = 'msg-' + Date.now() + Math.random().toString(36).slice(2);
+        bubble.id = msgId;
+        bubble.className = 'bg-gray-800 border border-gray-700/50 px-4 py-3.5 rounded-2xl rounded-tl-sm flex items-center gap-1.5';
+        bubble.innerHTML = `<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>`;
+
+        inner.appendChild(label);
+        inner.appendChild(bubble);
+        wrap.appendChild(inner);
+        container.appendChild(wrap);
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        return msgId;
+    }
+
+    function updateMessage(id, content) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className = 'bg-gray-800 border border-gray-700/50 text-gray-100 px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed msg-prose';
+        el.innerHTML = parseContent(content);
+        el.dataset.content = content; // Store raw content for copying
+
+        // Add action buttons if not already present
+        const parent = el.parentElement;
+        if (!parent.querySelector('.msg-actions')) {
+            const actions = document.createElement('div');
+            actions.className = 'msg-actions flex items-center gap-1 mt-1 px-1';
+
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'text-gray-600 hover:text-gray-300 transition p-1 rounded';
+            copyBtn.title = 'Copy message';
+            copyBtn.innerHTML = `<svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+            </svg>`;
+            copyBtn.onclick = () => copyMessage(el);
+            actions.appendChild(copyBtn);
+
+            const regenBtn = document.createElement('button');
+            regenBtn.className = 'text-gray-600 hover:text-gray-300 transition p-1 rounded';
+            regenBtn.title = 'Regenerate response';
+            regenBtn.innerHTML = `<svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>`;
+            regenBtn.onclick = () => regenerateResponse(id);
+            actions.appendChild(regenBtn);
+
+            parent.appendChild(actions);
+        }
+
+        document.getElementById('messages').scrollTo({ top: document.getElementById('messages').scrollHeight, behavior: 'smooth' });
+    }
+
+    // === PARSING ===
+    function parseContent(text) {
+        let s = String(text);
+        s = s.replace(/<think>([\s\S]*?)<\/think>/g,
+            '<div class="think-block"><span style="font-size:0.75em;letter-spacing:0.07em;text-transform:uppercase;color:#2dd4bf;font-weight:600;">Chain of Thought</span><br>$1</div>');
+        return DOMPurify.sanitize(marked.parse(s));
+    }
+
+    // === FILE UPLOAD ===
+    function handleFileSelect(fileList) {
+        for (const file of fileList) {
+            if (!pendingFiles.some(f => f.name === file.name && f.size === file.size)) {
+                pendingFiles.push(file);
+            }
+        }
+        renderFileChips();
+        // Reset input so the same file can be re-selected
+        document.getElementById('file-input').value = '';
+    }
+
+    function removePendingFile(index) {
+        pendingFiles.splice(index, 1);
+        renderFileChips();
+    }
+
+    function renderFileChips() {
+        const container = document.getElementById('file-chips');
+        if (pendingFiles.length === 0) {
+            container.classList.add('hidden');
+            container.innerHTML = '';
+            return;
+        }
+        container.classList.remove('hidden');
+        container.innerHTML = pendingFiles.map((f, i) => {
+            const sizeStr = f.size < 1024 ? f.size + ' B'
+                : f.size < 1048576 ? (f.size / 1024).toFixed(1) + ' KB'
+                : (f.size / 1048576).toFixed(1) + ' MB';
+            return `<span class="file-chip">
+                <svg class="w-3 h-3 flex-shrink-0 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                <span class="file-chip-name">${escapeHtml(f.name)}</span>
+                <span class="text-gray-600" style="font-size:0.65rem">${sizeStr}</span>
+                <span class="file-chip-x" onclick="removePendingFile(${i})">&times;</span>
+            </span>`;
+        }).join('');
+    }
+
+    /**
+     * Switch the file-chips area into uploading (animated) or idle state.
+     * @param {boolean} uploading
+     */
+    function setUploadingState(uploading) {
+        const container = document.getElementById('file-chips');
+        const attachBtn = document.getElementById('attach-btn');
+        if (!container) return;
+
+        if (uploading) {
+            // Disable attach button to prevent re-selection during upload
+            if (attachBtn) { attachBtn.disabled = true; attachBtn.style.opacity = '0.4'; }
+
+            // Replace each chip's file icon with a spinner and add .uploading class
+            container.querySelectorAll('.file-chip').forEach(chip => {
+                chip.classList.add('uploading');
+                // Replace the SVG file icon with a spinner
+                const icon = chip.querySelector('svg');
+                if (icon) {
+                    const spinner = document.createElement('span');
+                    spinner.className = 'chip-upload-spinner';
+                    chip.replaceChild(spinner, icon);
+                }
+                // Remove the × remove button (can't remove during upload)
+                const x = chip.querySelector('.file-chip-x');
+                if (x) x.style.display = 'none';
+            });
+
+            // Add a progress bar below chips
+            if (!document.getElementById('upload-status-bar')) {
+                const bar = document.createElement('div');
+                bar.id = 'upload-status-bar';
+                bar.className = 'upload-status-bar';
+                bar.innerHTML = `
+                    <span style="flex-shrink:0">⬆ Uploading ${pendingFiles.length} file${pendingFiles.length > 1 ? 's' : ''}…</span>
+                    <div class="upload-bar-track"><div class="upload-bar-fill"></div></div>
+                `;
+                container.parentElement.insertBefore(bar, container.nextSibling);
+            }
+        } else {
+            // Restore attach button
+            if (attachBtn) { attachBtn.disabled = false; attachBtn.style.opacity = ''; }
+            // Remove progress bar
+            const bar = document.getElementById('upload-status-bar');
+            if (bar) bar.remove();
+        }
+    }
+
+    async function uploadPendingFiles() {
+        if (pendingFiles.length === 0) return true;
+        const formData = new FormData();
+        for (const f of pendingFiles) formData.append('files', f);
+        // Pass current conversation ID so uploaded files get linked to this chat
+        if (currentConversationId) formData.append('conversationId', currentConversationId);
+
+        // Show upload animation
+        setUploadingState(true);
+
+        try {
+            const res = await apiFetch(`${API_URL}/upload`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${currentUser.token}` },
+                body: formData
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Upload failed');
+            }
+            const data = await res.json();
+
+            // Brief success flash before clearing chips
+            const container = document.getElementById('file-chips');
+            const statusBar = document.getElementById('upload-status-bar');
+            if (statusBar) {
+                statusBar.innerHTML = `<span style="color:#10b981;flex-shrink:0">✓ ${data.files.length} file${data.files.length > 1 ? 's' : ''} uploaded</span>`;
+            }
+            if (container) {
+                container.querySelectorAll('.file-chip').forEach(chip => {
+                    chip.classList.remove('uploading');
+                    chip.style.background = '#064e3b';
+                    chip.style.borderColor = '#10b981';
+                    chip.style.color = '#6ee7b7';
+                });
+            }
+
+            // Clear after 600ms
+            await new Promise(r => setTimeout(r, 600));
+            pendingFiles = [];
+            setUploadingState(false);
+            renderFileChips();
+            refreshFilePanel();
+            return data.files;
+        } catch (err) {
+            // Show error state on chips
+            const container = document.getElementById('file-chips');
+            const statusBar = document.getElementById('upload-status-bar');
+            if (statusBar) {
+                statusBar.innerHTML = `<span style="color:#f87171;flex-shrink:0">✗ Upload failed: ${escapeHtml(err.message)}</span>`;
+            }
+            if (container) {
+                container.querySelectorAll('.file-chip').forEach(chip => {
+                    chip.classList.remove('uploading');
+                    chip.style.borderColor = '#7f1d1d';
+                    chip.style.color = '#fca5a5';
+                });
+            }
+            // Reset to idle after 2s to let user retry
+            setTimeout(() => {
+                setUploadingState(false);
+                renderFileChips();
+            }, 2000);
+            throw err;
+        }
+    }
+
+    // --- Drag and drop — works anywhere on the page ---
+    (() => {
+        const overlay = document.getElementById('drag-overlay');
+        if (!overlay) return;
+        let dragCounter = 0;
+
+        // Listen on document so dragging anywhere triggers it
+        document.addEventListener('dragenter', (e) => {
+            if (!e.dataTransfer?.types?.includes('Files')) return;
+            e.preventDefault();
+            dragCounter++;
+            overlay.classList.add('visible');
+        });
+        document.addEventListener('dragleave', (e) => {
+            if (!e.dataTransfer?.types?.includes('Files')) return;
+            e.preventDefault();
+            dragCounter--;
+            if (dragCounter <= 0) { dragCounter = 0; overlay.classList.remove('visible'); }
+        });
+        document.addEventListener('dragover', (e) => {
+            if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+        });
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragCounter = 0;
+            overlay.classList.remove('visible');
+            if (!currentUser?.token) return;
+            if (e.dataTransfer?.files?.length > 0) handleFileSelect(e.dataTransfer.files);
+        });
+    })();
+
+    // --- Clipboard paste (Ctrl+V / Cmd+V / Print Screen paste) ---
+    // Handles: pasted images (screenshots), pasted files
+    document.addEventListener('paste', (e) => {
+        if (!currentUser?.token) return;
+
+        // Don't intercept paste when user is typing in an input/textarea
+        // UNLESS it contains files/images (e.g. pasting a screenshot while focused on chat input)
+        const target = e.target;
+        const isInputFocused = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+
+        const items = e.clipboardData?.items;
+        if (!items || items.length === 0) return;
+
+        // Collect any files/images from clipboard
+        const pastedFiles = [];
+        for (const item of items) {
+            if (item.kind === 'file') {
+                const file = item.getAsFile();
+                if (file) {
+                    // Give pasted images a meaningful name with timestamp
+                    let fileName = file.name;
+                    if (!fileName || fileName === 'image.png' || fileName.startsWith('image')) {
+                        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                        const ext = file.type.split('/')[1] || 'png';
+                        fileName = `screenshot-${ts}.${ext}`;
+                    }
+                    // Create a new File object with the better name
+                    const renamedFile = new File([file], fileName, { type: file.type });
+                    pastedFiles.push(renamedFile);
+                }
+            }
+        }
+
+        if (pastedFiles.length === 0) return;
+
+        // Prevent default paste behaviour (don't paste raw image bytes into textarea)
+        e.preventDefault();
+
+        // Add to pending files and show chips
+        handleFileSelect(pastedFiles);
+
+        // Show a brief toast so user knows the paste was captured
+        showPasteToast(pastedFiles);
+
+        // Focus the chat input so user can type their message
+        const input = document.getElementById('user-input');
+        if (input) input.focus();
+    });
+
+    function showPasteToast(files) {
+        const existing = document.getElementById('paste-toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'paste-toast';
+        const names = files.map(f => f.name).join(', ');
+        const label = files.length === 1
+            ? `📋 Pasted: ${files[0].name}`
+            : `📋 Pasted ${files.length} files`;
+        toast.innerHTML = `<span>${label}</span>`;
+        toast.style.cssText = `
+            position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+            background: #0f2133; color: #60a5fa;
+            border: 1px solid #1e3a8a; border-radius: 8px;
+            padding: 8px 16px; font-size: 0.78rem; font-weight: 500;
+            z-index: 9999; pointer-events: none;
+            animation: fadeSlideIn 0.2s ease-out;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 2500);
+    }
+
+    // === FILE PANEL ===
+    let filePanelOpen = false;
+
+    async function refreshFilePanel() {
+        if (!currentUser?.token) return;
+        try {
+            const res = await apiFetch(`${API_URL}/files`, { headers: authHeaders() });
+            if (!res.ok) return;
+            const data = await res.json();
+            const panel = document.getElementById('file-panel');
+            const countEl = document.getElementById('file-panel-count');
+            const listEl = document.getElementById('file-panel-list');
+
+            if (data.files.length === 0) {
+                panel.classList.add('hidden');
+                return;
+            }
+
+            panel.classList.remove('hidden');
+            countEl.textContent = `(${data.files.length})`;
+
+            // Group by folder
+            const inputFiles = data.files.filter(f => f.folder === 'input');
+            const outputFiles = data.files.filter(f => f.folder === 'output');
+
+            let html = '';
+            const renderGroup = (label, files) => {
+                if (files.length === 0) return '';
+                let h = `<div class="text-xs text-gray-600 font-medium mt-1 mb-0.5 px-2">${label}</div>`;
+                for (const f of files) {
+                    const sizeStr = f.size < 1024 ? f.size + ' B'
+                        : f.size < 1048576 ? (f.size / 1024).toFixed(1) + ' KB'
+                        : (f.size / 1048576).toFixed(1) + ' MB';
+                    h += `<div class="file-panel-item">
+                        <svg class="w-3 h-3 flex-shrink-0 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        <span class="flex-1 truncate">${escapeHtml(f.name)}</span>
+                        <span class="text-gray-600 flex-shrink-0" style="font-size:0.65rem">${sizeStr}</span>
+                        <div class="file-panel-actions">
+                            <a href="${API_URL}/files/download/${f.folder}/${encodeURIComponent(f.name)}"
+                               class="text-gray-600 hover:text-blue-400 transition p-0.5" title="Download">
+                                <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                </svg>
+                            </a>
+                            <button onclick="deleteFile('${f.folder}', '${escapeHtml(f.name)}')" class="text-gray-600 hover:text-red-400 transition p-0.5" title="Delete">
+                                <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>`;
+                }
+                return h;
+            };
+
+            html += renderGroup('Input', inputFiles);
+            html += renderGroup('Output', outputFiles);
+            listEl.innerHTML = html;
+        } catch (_) {}
+    }
+
+    function toggleFilePanel() {
+        filePanelOpen = !filePanelOpen;
+        const body = document.getElementById('file-panel-body');
+        const chevron = document.getElementById('file-panel-chevron');
+        body.classList.toggle('hidden', !filePanelOpen);
+        chevron.style.transform = filePanelOpen ? 'rotate(90deg)' : '';
+    }
+
+    async function deleteFile(folder, filename) {
+        try {
+            await apiFetch(`${API_URL}/files/${folder}/${encodeURIComponent(filename)}`, {
+                method: 'DELETE',
+                headers: authHeaders()
+            });
+            refreshFilePanel();
+        } catch (_) {}
+    }
+
+    // Download files need auth header — intercept clicks to use fetch + blob
+    document.addEventListener('click', async (e) => {
+        const link = e.target.closest('a[href*="/files/download/"]');
+        if (!link) return;
+        e.preventDefault();
+        try {
+            const res = await apiFetch(link.href, { headers: { 'Authorization': `Bearer ${currentUser.token}` } });
+            if (!res.ok) { alert('Download failed: ' + (await res.text() || res.statusText)); return; }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = decodeURIComponent(link.href.split('/').pop());
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (err) { console.error('Download error:', err); alert('Download failed. Please try again.'); }
+    });
+
+    // === STOP AGENT ===
+    async function stopAgent(activityId) {
+        const btn = document.getElementById(`${activityId}-stop`);
+        if (btn) { btn.disabled = true; btn.textContent = 'Stopping…'; }
+        try {
+            await apiFetch(`${API_URL}/chat/stop`, {
+                method: 'POST',
+                headers: authHeaders()
+            });
+        } catch (_) {}
+        // The SSE stream will end on its own — the error/done handler will finalize
+        const title = document.getElementById(`${activityId}-title`);
+        if (title) { title.textContent = 'Agent stopped'; title.className = 'activity-title error'; }
+        const spinner = document.getElementById(`${activityId}-spinner`);
+        if (spinner) spinner.classList.add('error');
+        if (btn) btn.style.display = 'none';
+    }
+
+    // Hide stop button when activity panel finalizes (called from finalize)
+    const _origFinalize = 'patched'; // marker — the real hiding is below
+    // We patch via MutationObserver: when spinner gets .done or .error, hide stop btn
+    new MutationObserver((mutations) => {
+        for (const m of mutations) {
+            if (m.type === 'attributes' && m.attributeName === 'class') {
+                const el = m.target;
+                if (el.classList.contains('activity-spinner') && (el.classList.contains('done') || el.classList.contains('error'))) {
+                    const panel = el.closest('.activity-panel');
+                    if (panel) {
+                        const stopBtn = panel.querySelector('.stop-btn');
+                        if (stopBtn) stopBtn.style.display = 'none';
+                    }
+                }
+            }
+        }
+    }).observe(document.getElementById('messages') || document.body, {
+        subtree: true, attributes: true, attributeFilter: ['class']
+    });
+
+    // === BROWSER NOTIFICATIONS ===
+    let _notifyWhenDone = false;
+    let _notifyTimer = null;
+    let _notifyPromptEl = null;
+
+    /**
+     * Start the 30s notification prompt timer.
+     * Call this when a streaming message begins.
+     * @param {HTMLElement} parentEl - Element to append the prompt to (e.g. the activity panel's parent)
+     */
+    function startNotifyTimer(parentEl) {
+        _notifyWhenDone = false;
+        clearTimeout(_notifyTimer);
+        if (_notifyPromptEl) { _notifyPromptEl.remove(); _notifyPromptEl = null; }
+
+        // Don't show if permission already granted and user previously opted in
+        if (Notification.permission === 'granted' && localStorage.getItem('agent_notify') === 'yes') {
+            _notifyWhenDone = true;
+            return;
+        }
+
+        _notifyTimer = setTimeout(() => {
+            // Only show if the page is NOT focused (user is elsewhere)
+            // Or always show — it's non-intrusive
+            if (_notifyPromptEl) return; // already shown
+            const prompt = document.createElement('div');
+            prompt.className = 'notify-prompt';
+            prompt.innerHTML = `
+                <span>🔔 Taking a while — notify when done?</span>
+                <button class="notify-yes" onclick="acceptNotify(this)">Yes</button>
+                <button class="notify-no" onclick="dismissNotify(this)">No</button>
+            `;
+            _notifyPromptEl = prompt;
+            parentEl.appendChild(prompt);
+        }, 30000); // 30 seconds
+    }
+
+    /** User clicked Yes on notification prompt */
+    function acceptNotify(btn) {
+        const prompt = btn.closest('.notify-prompt');
+        if (Notification.permission === 'default') {
+            Notification.requestPermission().then(perm => {
+                if (perm === 'granted') {
+                    _notifyWhenDone = true;
+                    localStorage.setItem('agent_notify', 'yes');
+                    if (prompt) { prompt.innerHTML = '<span style="color:#6ee7b7;">✓ You\'ll be notified when done</span>'; setTimeout(() => prompt.remove(), 3000); }
+                } else {
+                    if (prompt) { prompt.innerHTML = '<span style="color:#fca5a5;">Notifications blocked by browser</span>'; setTimeout(() => prompt.remove(), 3000); }
+                }
+            });
+        } else if (Notification.permission === 'granted') {
+            _notifyWhenDone = true;
+            localStorage.setItem('agent_notify', 'yes');
+            if (prompt) { prompt.innerHTML = '<span style="color:#6ee7b7;">✓ You\'ll be notified when done</span>'; setTimeout(() => prompt.remove(), 3000); }
+        } else {
+            if (prompt) { prompt.innerHTML = '<span style="color:#fca5a5;">Notifications blocked. Enable in browser settings.</span>'; setTimeout(() => prompt.remove(), 3000); }
+        }
+    }
+
+    /** User clicked No on notification prompt */
+    function dismissNotify(btn) {
+        const prompt = btn.closest('.notify-prompt');
+        if (prompt) prompt.remove();
+        _notifyPromptEl = null;
+        _notifyWhenDone = false;
+    }
+
+    /** Fire browser notification when agent completes */
+    function fireCompletionNotification(reply) {
+        clearTimeout(_notifyTimer);
+        if (_notifyPromptEl) { _notifyPromptEl.remove(); _notifyPromptEl = null; }
+        if (!_notifyWhenDone) return;
+        if (Notification.permission !== 'granted') return;
+        // Only fire if page is NOT focused
+        if (document.hasFocus()) return;
+        try {
+            const snippet = (reply || 'Task complete').substring(0, 120);
+            new Notification('Agent Complete ✅', {
+                body: snippet + (reply && reply.length > 120 ? '…' : ''),
+                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="85">🤖</text></svg>',
+                tag: 'agent-done',
+            });
+        } catch (e) { console.warn('Notification failed:', e); }
+        _notifyWhenDone = false;
+    }
+
+    // === SKILLS PANEL ===
+
+    /** Returns array of enabled skill names */
+    function getEnabledSkillNames() {
+        return allSkills
+            .filter(s => skillPreferences[s.name] !== false)
+            .map(s => s.name);
+    }
+
+    /** Load skills list + user preferences from backend */
+    async function loadSkills() {
+        if (!currentUser?.token) return;
+        try {
+            const [skillsRes, prefRes] = await Promise.all([
+                apiFetch(`${API_URL}/skills`, { headers: authHeaders() }),
+                apiFetch(`${API_URL}/skills/preferences`, { headers: authHeaders() })
+            ]);
+            if (skillsRes.ok) {
+                const data = await skillsRes.json();
+                allSkills = data.skills || [];
+            }
+            if (prefRes.ok) {
+                const data = await prefRes.json();
+                skillPreferences = data.preferences || {};
+            }
+            // Ensure all loaded skills have a default state
+            for (const s of allSkills) {
+                if (skillPreferences[s.name] === undefined) skillPreferences[s.name] = true;
+            }
+            renderSkillsPanel();
+        } catch (err) {
+            console.error('[Skills] Failed to load:', err);
+        }
+    }
+
+    /** Debounced save of skill preferences to backend */
+    function saveSkillPreferences() {
+        clearTimeout(_saveSkillsTimer);
+        _saveSkillsTimer = setTimeout(async () => {
+            try {
+                await apiFetch(`${API_URL}/skills/preferences`, {
+                    method: 'PUT',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ preferences: skillPreferences })
+                });
+            } catch (err) {
+                console.warn('[Skills] Failed to save preferences:', err);
+            }
+        }, 400);
+    }
+
+    /** Toggle a single skill on/off */
+    function toggleSkill(skillName, enabled) {
+        skillPreferences[skillName] = enabled;
+        updateSkillsBadge();
+        updateCategoryToggleState(skillName);
+        saveSkillPreferences();
+    }
+
+    /** Toggle all skills in a category */
+    function toggleCategory(category, enabled) {
+        const catSkills = allSkills.filter(s => s.category === category);
+        for (const s of catSkills) {
+            skillPreferences[s.name] = enabled;
+            const cb = document.getElementById(`skill-cb-${s.name}`);
+            if (cb) cb.checked = enabled;
+        }
+        updateSkillsBadge();
+        saveSkillPreferences();
+    }
+
+    /** Recompute a category toggle's state (checked/indeterminate/unchecked) */
+    function updateCategoryToggleState(changedSkillName) {
+        const s = allSkills.find(sk => sk.name === changedSkillName);
+        if (!s) return;
+        const category = s.category;
+        const catSkills = allSkills.filter(sk => sk.category === category);
+        const enabledCount = catSkills.filter(sk => skillPreferences[sk.name] !== false).length;
+        const catId = 'cat-toggle-' + CSS.escape(category);
+        const catCb = document.getElementById(catId);
+        if (!catCb) return;
+        if (enabledCount === catSkills.length) {
+            catCb.checked = true;
+            catCb.indeterminate = false;
+        } else if (enabledCount === 0) {
+            catCb.checked = false;
+            catCb.indeterminate = false;
+        } else {
+            catCb.indeterminate = true;
+        }
+    }
+
+    /** Update the badge counter showing how many skills are enabled */
+    function updateSkillsBadge() {
+        const badge = document.getElementById('skills-badge');
+        if (!badge) return;
+        const count = getEnabledSkillNames().length;
+        badge.textContent = count;
+        badge.classList.toggle('all-off', count === 0);
+    }
+
+    /** Toggle the skills panel collapsed/expanded */
+    function toggleSkillsPanel() {
+        skillsPanelCollapsed = !skillsPanelCollapsed;
+        const panel = document.getElementById('skills-panel');
+        if (panel) panel.classList.toggle('collapsed', skillsPanelCollapsed);
+    }
+
+    /** Build category ID safe string */
+    function catId(category) {
+        return category.replace(/[^a-zA-Z0-9]/g, '-');
+    }
+
+    /** Render the entire skills panel */
+    function renderSkillsPanel() {
+        const list = document.getElementById('skills-list');
+        if (!list) return;
+
+        if (allSkills.length === 0) {
+            list.innerHTML = '<div class="text-xs text-gray-600 text-center py-6">No skills found</div>';
+            updateSkillsBadge();
+            return;
+        }
+
+        // Group by category preserving CATEGORY_ICONS order
+        const categoryOrder = Object.keys(CATEGORY_ICONS);
+        const grouped = {};
+        for (const s of allSkills) {
+            if (!grouped[s.category]) grouped[s.category] = [];
+            grouped[s.category].push(s);
+        }
+
+        // Sort categories by predefined order, then alphabetically for unknowns
+        const categories = Object.keys(grouped).sort((a, b) => {
+            const ai = categoryOrder.indexOf(a), bi = categoryOrder.indexOf(b);
+            if (ai === -1 && bi === -1) return a.localeCompare(b);
+            if (ai === -1) return 1;
+            if (bi === -1) return -1;
+            return ai - bi;
+        });
+
+        let html = '';
+        for (const category of categories) {
+            const skills = grouped[category];
+            const icon = CATEGORY_ICONS[category] || '⚙️';
+            const cid = catId(category);
+            const enabledCount = skills.filter(s => skillPreferences[s.name] !== false).length;
+            const allEnabled = enabledCount === skills.length;
+            const noneEnabled = enabledCount === 0;
+            const partial = !allEnabled && !noneEnabled;
+            const indetermAttr = partial ? 'data-indeterminate="true"' : '';
+
+            html += `<div class="skill-category">
+                <div class="skill-category-header" onclick="toggleCatBody('${cid}')">
+                    <span class="skill-cat-chevron" id="cat-chev-${cid}">▶</span>
+                    <span style="font-size:0.75rem;flex-shrink:0">${icon}</span>
+                    <span class="skill-cat-name">${escapeHtml(category)}</span>
+                    <span class="skill-cat-count">${enabledCount}/${skills.length}</span>
+                    <label class="cat-toggle" onclick="event.stopPropagation()" title="Toggle all in ${escapeHtml(category)}">
+                        <input type="checkbox" id="cat-toggle-${cid}"
+                            ${allEnabled ? 'checked' : ''}
+                            ${indetermAttr}
+                            onchange="toggleCategory('${escapeHtml(category)}', this.checked)">
+                        <span class="cat-toggle-track"></span>
+                        <span class="cat-toggle-thumb"></span>
+                    </label>
+                </div>
+                <div class="skill-cat-body" id="cat-body-${cid}">`;
+
+            for (const skill of skills) {
+                const enabled = skillPreferences[skill.name] !== false;
+                const shortDesc = skill.description.length > 90
+                    ? skill.description.substring(0, 90) + '…'
+                    : skill.description;
+                const displayName = 'EZ ' + skill.name.charAt(0).toUpperCase() + skill.name.slice(1);
+                html += `<div class="skill-item ${enabled ? '' : 'disabled'}" id="skill-row-${escapeHtml(skill.name)}">
+                    <div class="skill-item-info">
+                        <div class="skill-item-name">${escapeHtml(displayName)}</div>
+                        <div class="skill-item-desc">${escapeHtml(shortDesc)}</div>
+                    </div>
+                    <label class="skill-toggle" title="${enabled ? 'Disable' : 'Enable'} ${escapeHtml(skill.name)}">
+                        <input type="checkbox" id="skill-cb-${escapeHtml(skill.name)}"
+                            ${enabled ? 'checked' : ''}
+                            onchange="toggleSkillUI('${escapeHtml(skill.name)}', this.checked)">
+                        <span class="skill-toggle-track"></span>
+                        <span class="skill-toggle-thumb"></span>
+                    </label>
+                </div>`;
+            }
+
+            html += `</div></div>`;
+        }
+
+        list.innerHTML = html;
+
+        // Set indeterminate state via JS (can't do with HTML attribute)
+        for (const category of categories) {
+            const skills = grouped[category];
+            const enabledCount = skills.filter(s => skillPreferences[s.name] !== false).length;
+            const partial = enabledCount > 0 && enabledCount < skills.length;
+            if (partial) {
+                const cb = document.getElementById(`cat-toggle-${catId(category)}`);
+                if (cb) cb.indeterminate = true;
+            }
+        }
+
+        updateSkillsBadge();
+    }
+
+    /** Toggle skill from UI (updates row disabled class) */
+    function toggleSkillUI(skillName, enabled) {
+        skillPreferences[skillName] = enabled;
+        // Update row dim state
+        const row = document.getElementById(`skill-row-${skillName}`);
+        if (row) row.classList.toggle('disabled', !enabled);
+        updateSkillsBadge();
+        updateCategoryToggleState(skillName);
+        saveSkillPreferences();
+    }
+
+    /** Toggle a category body open/closed */
+    function toggleCatBody(cid) {
+        const body = document.getElementById(`cat-body-${cid}`);
+        const chev = document.getElementById(`cat-chev-${cid}`);
+        if (!body) return;
+        const isOpen = body.classList.contains('open');
+        body.classList.toggle('open', !isOpen);
+        if (chev) chev.classList.toggle('open', !isOpen);
+    }
+
+    // === SHARE MODAL ===
+
+    async function openShareModal() {
+        if (!currentConversationId) return;
+        document.getElementById('share-modal').classList.remove('hidden');
+        document.getElementById('share-error').classList.add('hidden');
+        document.getElementById('share-generate-area').style.display = '';
+        document.getElementById('share-link-area').classList.add('hidden');
+        // Check if share already exists
+        try {
+            const res = await apiFetch(`${API_URL}/conversations/${currentConversationId}/share`, {
+                method: 'POST', headers: authHeaders()
+            });
+            if (res.ok) {
+                const data = await res.json();
+                currentShareToken = data.shareToken;
+                showShareLink(data.shareToken);
+            }
+        } catch (_) {}
+    }
+
+    function openShareModalForConv(e, convId) {
+        e.stopPropagation();
+        if (convId !== currentConversationId) {
+            loadConversation(convId).then(() => openShareModal());
+        } else {
+            openShareModal();
+        }
+    }
+
+    function showShareLink(token) {
+        const baseUrl = window.location.origin;
+        const link = `${baseUrl}/share/${token}`;
+        document.getElementById('share-link-input').value = link;
+        document.getElementById('share-link-area').classList.remove('hidden');
+        document.getElementById('share-generate-area').style.display = 'none';
+    }
+
+    async function generateShareLink() {
+        const btn = document.getElementById('share-generate-btn');
+        btn.disabled = true;
+        btn.innerHTML = `<span class="opacity-60">Generating…</span>`;
+        try {
+            const res = await apiFetch(`${API_URL}/conversations/${currentConversationId}/share`, {
+                method: 'POST', headers: authHeaders()
+            });
+            if (!res.ok) throw new Error('Failed');
+            const data = await res.json();
+            currentShareToken = data.shareToken;
+            showShareLink(data.shareToken);
+        } catch (_) {
+            const err = document.getElementById('share-error');
+            err.textContent = 'Could not generate share link. Try again.';
+            err.classList.remove('hidden');
+            btn.disabled = false;
+            btn.innerHTML = `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg> Generate Share Link`;
+        }
+    }
+
+    async function revokeShare() {
+        if (!currentConversationId) return;
+        try {
+            await apiFetch(`${API_URL}/conversations/${currentConversationId}/share`, {
+                method: 'DELETE', headers: authHeaders()
+            });
+            currentShareToken = null;
+            document.getElementById('share-link-area').classList.add('hidden');
+            document.getElementById('share-generate-area').style.display = '';
+            const btn = document.getElementById('share-generate-btn');
+            btn.disabled = false;
+            btn.innerHTML = `<svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg> Generate Share Link`;
+        } catch (_) {}
+    }
+
+    function copyShareLink() {
+        const input = document.getElementById('share-link-input');
+        const btn = document.getElementById('share-copy-btn');
+        if (!input) return;
+        copyToClipboard(input.value).then(() => {
+            btn.textContent = '✓ Copied!';
+            btn.style.background = '#10b981';
+            setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; }, 2000);
+        });
+    }
+
+    function closeShareModal(e) {
+        if (e && e.target !== document.getElementById('share-modal')) return;
+        document.getElementById('share-modal').classList.add('hidden');
+    }
+
+    // Escape key closes share modal
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('share-modal');
+            if (modal && !modal.classList.contains('hidden')) {
+                modal.classList.add('hidden');
+            }
+        }
+    });
+
+    // === CHAT FILES ===
+
+    let chatFilesOpen = false;
+
+    async function loadChatFiles(convId) {
+        if (!convId) return;
+        try {
+            const res = await apiFetch(`${API_URL}/conversations/${convId}/files`, { headers: authHeaders() });
+            if (!res.ok) return;
+            const data = await res.json();
+            // Pass full object — renderChatFiles handles {inputs, outputs} or flat array
+            renderChatFiles(data);
+        } catch (_) {}
+    }
+
+    function fmtFileSize(sz) {
+        if (!sz) return '—';
+        if (sz < 1024) return sz + ' B';
+        if (sz < 1048576) return (sz/1024).toFixed(1) + ' KB';
+        return (sz/1048576).toFixed(1) + ' MB';
+    }
+    function fmtFileTime(ts) {
+        if (!ts) return '';
+        const d = new Date(ts);
+        return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})
+             + ' ' + d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+    }
+    function fileRowHtml(f) {
+        const isOut = f.folder === 'output';
+        const badgeStyle = isOut
+            ? 'background:#052e16;color:#4ade80;border:1px solid #166534;'
+            : 'background:#0c1f3f;color:#60a5fa;border:1px solid #1e3a8a;';
+        return `<div style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:4px;">
+            <span style="font-size:0.58rem;font-weight:600;padding:1px 5px;border-radius:3px;flex-shrink:0;${badgeStyle}">${isOut ? '↓ output' : '↑ input'}</span>
+            <svg style="width:11px;height:11px;flex-shrink:0;color:#6b7280" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+            <span class="flex-1 truncate" style="font-size:0.7rem;color:#d1d5db;" title="${escapeHtml(f.filename)}">${escapeHtml(f.filename)}</span>
+            <span style="font-size:0.6rem;color:#4b5563;flex-shrink:0;">${fmtFileSize(f.size)}</span>
+            <span style="font-size:0.58rem;color:#374151;flex-shrink:0;white-space:nowrap;">${fmtFileTime(f.attached_at)}</span>
+            <a href="${API_URL}/files/download/${f.folder}/${encodeURIComponent(f.filename)}" style="color:#4b5563;flex-shrink:0;margin-left:2px;" title="Download">
+                <svg style="width:11px;height:11px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+            </a>
+        </div>`;
+    }
+    function renderChatFiles(filesOrData) {
+        const panel = document.getElementById('chat-files-panel');
+        const list  = document.getElementById('chat-files-list');
+        const count = document.getElementById('chat-files-count');
+        if (!panel || !list) return;
+
+        // Accept flat array or {files, inputs, outputs} object
+        let inputs  = [];
+        let outputs = [];
+        if (Array.isArray(filesOrData)) {
+            inputs  = filesOrData.filter(f => f.folder === 'input');
+            outputs = filesOrData.filter(f => f.folder === 'output');
+        } else {
+            inputs  = filesOrData.inputs  || [];
+            outputs = filesOrData.outputs || [];
+        }
+
+        const total = inputs.length + outputs.length;
+        if (total === 0) { panel.classList.add('hidden'); return; }
+
+        panel.classList.remove('hidden');
+        if (count) count.textContent = `${total} file${total !== 1 ? 's' : ''}`;
+        // Auto-open the body whenever there are files — user should see them without clicking
+        const body = document.getElementById('chat-files-body');
+        const chev = document.getElementById('chat-files-chevron');
+        if (body && !chatFilesOpen) {
+            chatFilesOpen = true;
+            body.classList.add('open');
+            if (chev) chev.style.transform = 'rotate(90deg)';
+        }
+
+        let html = '';
+        if (inputs.length) {
+            html += `<div style="font-size:0.6rem;font-weight:600;color:#4b5563;text-transform:uppercase;letter-spacing:.05em;padding:4px 6px 2px;">Uploaded (${inputs.length})</div>`;
+            html += inputs.map(f => fileRowHtml(f)).join('');
+        }
+        if (outputs.length) {
+            if (inputs.length) html += `<div style="height:1px;background:rgba(255,255,255,0.06);margin:3px 0;"></div>`;
+            html += `<div style="font-size:0.6rem;font-weight:600;color:#4b5563;text-transform:uppercase;letter-spacing:.05em;padding:4px 6px 2px;">Generated (${outputs.length})</div>`;
+            html += outputs.map(f => fileRowHtml(f)).join('');
+        }
+        list.innerHTML = html;
+    }
+    function toggleChatFilesBody() {
+        chatFilesOpen = !chatFilesOpen;
+        const body = document.getElementById('chat-files-body');
+        const chev = document.getElementById('chat-files-chevron');
+        if (body) body.classList.toggle('open', chatFilesOpen);
+        if (chev) chev.style.transform = chatFilesOpen ? 'rotate(90deg)' : '';
+    }
+
+    // Fix the duplicate showChat stub left from earlier edit
+    // (the orphan lines 1477-1482 need removal — done via the overall correct flow above)
+</script>
+</body>
+</html>
