@@ -112,7 +112,10 @@
 <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
 
 <script>
-    const API_URL = 'http://localhost:5000/api';
+    const API_URL = (() => {
+        const loc = window.location;
+        return `${loc.protocol}//${loc.hostname}:5600/api`;
+    })();
 
     const renderer = new marked.Renderer();
     renderer.code = function(code, language) {
@@ -215,36 +218,86 @@
         }
 
         // Render shared files if any
-        const allFiles = [...inputs, ...outputs];
-        if (allFiles.length > 0) {
+        // Share page shows only output (generated) files — never input (uploaded) files
+        // Output files have a download link using the public share token endpoint (no auth needed)
+        if (outputs.length > 0) {
             document.getElementById('shared-files').classList.remove('hidden');
             const filesList = document.getElementById('shared-files-list');
 
             const fmtSize = sz => sz < 1024 ? sz + ' B' : sz < 1048576 ? (sz/1024).toFixed(1) + ' KB' : (sz/1048576).toFixed(1) + ' MB';
             const fmtTime = ts => { if (!ts) return ''; const d = new Date(ts); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); };
 
-            for (const group of [{label:'Uploaded', files: inputs}, {label:'Generated', files: outputs}]) {
-                if (!group.files.length) continue;
-                const heading = document.createElement('div');
-                heading.style.cssText = 'font-size:0.6rem;font-weight:600;color:#4b5563;text-transform:uppercase;letter-spacing:.05em;padding:6px 0 2px;';
-                heading.textContent = `${group.label} (${group.files.length})`;
-                filesList.appendChild(heading);
+            const heading = document.createElement('div');
+            heading.style.cssText = 'font-size:0.6rem;font-weight:600;color:#4b5563;text-transform:uppercase;letter-spacing:.05em;padding:6px 0 4px;';
+            heading.textContent = `Generated Files (${outputs.length})`;
+            filesList.appendChild(heading);
 
-                for (const f of group.files) {
-                    const isOut = f.folder === 'output';
-                    const row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;';
-                    row.innerHTML = `
-                        <span style="font-size:0.58rem;font-weight:600;padding:1px 5px;border-radius:3px;flex-shrink:0;${isOut?'background:#052e16;color:#4ade80;border:1px solid #166534;':'background:#0c1f3f;color:#60a5fa;border:1px solid #1e3a8a;'}">${isOut?'↓ output':'↑ input'}</span>
-                        <svg style="width:11px;height:11px;flex-shrink:0;color:#6b7280" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
-                        <span style="font-size:0.7rem;color:#d1d5db;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.filename}">${f.filename}</span>
-                        <span style="font-size:0.6rem;color:#4b5563;flex-shrink:0;">${fmtSize(f.size)}</span>
-                        <span style="font-size:0.58rem;color:#374151;flex-shrink:0;white-space:nowrap;">${fmtTime(f.attached_at)}</span>
-                    `;
-                    filesList.appendChild(row);
-                }
+            // shareToken is available from the URL
+            const shareToken = window.location.pathname.split('/').pop();
+
+            for (const f of outputs) {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0;';
+                const downloadUrl = `/api/share/${shareToken}/download/${encodeURIComponent(f.filename)}`;
+
+                // Build file icon
+                const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                icon.setAttribute('style','width:11px;height:11px;flex-shrink:0;color:#4ade80');
+                icon.setAttribute('fill','none'); icon.setAttribute('viewBox','0 0 24 24');
+                icon.setAttribute('stroke-width','1.5'); icon.setAttribute('stroke','currentColor');
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>';
+
+                const nameSpan = document.createElement('span');
+                nameSpan.style.cssText = 'font-size:0.7rem;color:#d1d5db;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                nameSpan.title = f.filename;
+                nameSpan.textContent = f.filename;
+
+                const sizeSpan = document.createElement('span');
+                sizeSpan.style.cssText = 'font-size:0.6rem;color:#4b5563;flex-shrink:0;';
+                sizeSpan.textContent = fmtSize(f.size);
+
+                const timeSpan = document.createElement('span');
+                timeSpan.style.cssText = 'font-size:0.58rem;color:#374151;flex-shrink:0;white-space:nowrap;';
+                timeSpan.textContent = fmtTime(f.attached_at);
+
+                // Download button — use data attributes to avoid quote escaping issues
+                const btn = document.createElement('a');
+                btn.href = downloadUrl;
+                btn.title = 'Download';
+                btn.style.cssText = 'flex-shrink:0;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;background:#052e16;border:1px solid #166534;color:#4ade80;text-decoration:none;';
+                btn.dataset.url = downloadUrl;
+                btn.dataset.filename = f.filename;
+                btn.innerHTML = '<svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>';
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    downloadSharedFile(btn.dataset.url, btn.dataset.filename);
+                });
+
+                row.appendChild(icon);
+                row.appendChild(nameSpan);
+                row.appendChild(sizeSpan);
+                row.appendChild(timeSpan);
+                row.appendChild(btn);
+                filesList.appendChild(row);
             }
         }
+    }
+
+    // Download a shared output file — no auth needed, share token in URL validates access
+    async function downloadSharedFile(url, filename) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) { alert('Download failed: ' + res.statusText); return; }
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(blobUrl);
+        } catch (err) { alert('Download failed. Please try again.'); }
     }
 
     loadShare();

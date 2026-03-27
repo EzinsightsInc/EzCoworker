@@ -9,6 +9,33 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data_community:/var/lib/postgresql/data
 
+  litellm:
+    image: docker.litellm.ai/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml
+    env_file:
+      - .env
+    environment:
+      # Disable automatic reasoning summary injection — we never want
+      # reasoning params forwarded to any model via this proxy
+      - LITELLM_REASONING_AUTO_SUMMARY=false
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    restart: unless-stopped
+
+  litellm-proxy:
+    build: ./litellm-proxy
+    ports:
+      - "4001:4001"
+    environment:
+      - LITELLM_HOST=litellm
+      - LITELLM_PORT=4000
+      - PROXY_PORT=4001
+    depends_on:
+      - litellm
+    restart: unless-stopped
+
   backend:
     build: ./backend
     ports:
@@ -19,6 +46,8 @@ services:
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-claudedb_community}
       - JWT_SECRET=${JWT_SECRET}
       - OLLAMA_URL=${OLLAMA_URL}
+      - LITELLM_URL=http://litellm-proxy:4001
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-ezcoworker-community}
       - CONTEXT_MESSAGE_LIMIT=${CONTEXT_MESSAGE_LIMIT:-10}
       - MAX_AGENT_TURNS=${MAX_AGENT_TURNS:-40}
       - MAX_AGENT_TURNS_LOCAL=${MAX_AGENT_TURNS_LOCAL:-8}
@@ -37,11 +66,11 @@ services:
       - ./backend/server.js:/app/server.js
       - ./backend/containerManager.js:/app/containerManager.js
       - ./backend/modelSync.js:/app/modelSync.js
-      - ./backend/agentTeamManager.js:/app/agentTeamManager.js
       - ./backend/pluginManager.js:/app/pluginManager.js
-      - ./backend/executionPlanner.js:/app/executionPlanner.js
     depends_on:
       - postgres
+      - litellm
+      - litellm-proxy
 
   frontend:
     build:

@@ -10,11 +10,10 @@ const ContainerManager = require('./containerManager');
 const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 
-// === NEW: Multi-agent team, plugins/MCP, chat platforms, IDE ===
-const AgentTeamManager     = require('./agentTeamManager');
-const { buildIntentPlan, summarizeExecution, loadExecutionContext, classifyTurnIntent, buildPatchTask, buildExtendContext } = require('./executionPlanner');
+// === Plugins, MCP, IDE ===
+
 const pluginManager        = require('./pluginManager');
-const { router: platformRouter, init: initPlatformRouter } = require('./chatPlatformRouter');
+
 
 // === SKILLS CONFIGURATION ===
 const SKILL_CATEGORIES = {
@@ -25,7 +24,7 @@ const SKILL_CATEGORIES = {
   'Testing & Quality':          ['dev-swarm-code-test', 'test-cases', 'testing-integration', 'persona-testing'],
   'Communication & Docs':       ['doc-coauthoring', 'internal-comms', 'rca-generator'],
   'Development Tools':          ['mcp-builder', 'skill-creator', 'skill-development', 'hook-development'],
-  'Business & Analytics':       ['kpi-dashboard-design', 'ceo-command-center', 'deep-research'],
+  'Business & Analytics':       ['kpi-dashboard-design', 'deep-research'],
   'Project Management':         ['estimating-work', 'project-estimation'],
 };
 
@@ -277,7 +276,7 @@ const CAPABLE_SYSTEM_PROMPT = [
   '4. When reading user uploads, read from /home/node/app/workspace/input/.',
   '5. Be concise and practical. Take action, do not just describe what you plan to do.',
   '6. ALWAYS append a datetime suffix to every output filename using format YYYYMMDD_HHMMSS.',
-  '   Examples: ceo-command-center_20240315_143022.html, report_20240315_143022.pdf, analysis_20240315_143022.xlsx',
+  '   Examples: dashboard_20240315_143022.html, report_20240315_143022.pdf, analysis_20240315_143022.xlsx',
   '   Use Python: from datetime import datetime; ts = datetime.now().strftime("%Y%m%d_%H%M%S")',
   '   Or shell: TS=$(date +%Y%m%d_%H%M%S)',
   '   This ensures files are never overwritten and each run produces a unique file.',
@@ -298,10 +297,12 @@ app.use(express.json());
 
 // CORS: allow the deployed frontend origin and any localhost dev origin
 const ALLOWED_ORIGINS = [
-  process.env.FRONTEND_URL,          // http://localhost:3500
+  process.env.FRONTEND_URL,          // configurable via env
   'http://localhost:3000',
   'http://localhost:3500',
+  'http://localhost:3600',            // Community frontend
   'http://localhost:5000',
+  'http://localhost:5600',
 ].filter(Boolean);
 
 const corsOptions = {
@@ -318,11 +319,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Pre-flight requests for all routes
-
-// === Platform webhook router (Slack, Discord, WhatsApp, Zoho, Generic) ===
-// Webhook endpoints bypass auth middleware — they verify via platform signatures.
-// Must be mounted before the auth rate limiters.
-// Platform webhook router not included in Community Edition
 
 // Rate limiters
 const authLimiter = rateLimit({
@@ -359,7 +355,6 @@ const pool = new Pool({
 });
 
 const containerManager  = new ContainerManager();
-const agentTeamManager  = new AgentTeamManager(containerManager);
 
 // In-memory cache for uploaded file listings per user.
 // Invalidated on upload or delete. Avoids repeated fs.readdirSync on every chat message.
@@ -407,7 +402,6 @@ const { syncAllModels } = require('./modelSync');
 const SKILL_MIN_TIER = {
   // Tier 4: Elite agentic — need flagship model tool calling
   'agent-browser':        4,
-  'ceo-command-center':   4,
   'dev-swarm-code-test':  4,
   'webapp-testing':       4,
   'persona-testing':      4,
@@ -490,10 +484,6 @@ const INTENTS = [
   // Tier 4: Agentic/orchestration — Sonnet/flagship only
   { name: 'agentic_task',     tier: 4, match: (m) =>
       /\b(scrape|crawl|automate|fill.?form|web.?test|e2e|end.?to.?end|swarm|multi.?agent|orchestrat|coordinate|parallel.?agent|spawn.?agent)\b/.test(m) },
-  { name: 'command_center',   tier: 4, match: (m) =>
-      /\b(command.?center|ceo.?dashboard|executive.?dashboard|ops.?center)\b/.test(m) },
-  { name: 'mcp_tools',        tier: 4, match: (m) =>
-      /\b(mcp|model.?context.?protocol|tool.?call|function.?call)\b/.test(m) },
 ];
 // ── PREFERENCE SCORE within same tier ─────────────────────────
 // ── DYNAMIC MODEL CLASSIFICATION ─────────────────────────────
@@ -514,26 +504,88 @@ const INTENTS = [
 // ──────────────────────────────────────────────────────────────
 
 
-// ── Community Edition — simplified model selection ───────────────────────────
-// Full intelligent model routing (tier system, intent analysis, team detection)
-// is available in EzCoworker Enterprise.
+// ── Model tier classifier ─────────────────────────────────────────────────────
+// Returns 1–4 for a given model row based on provider + model identity.
+// Tier 1 — Standard Ollama (uncapable local models)
+// Tier 2 — Capable Ollama (is_capable=true in DB)
+// Tier 3 — Commercial mid: haiku, gpt-4o-mini, gpt-4.1-mini/nano, gemini-flash, groq
+// Tier 4 — Commercial flagship: sonnet/opus 4.x, gpt-4o, gpt-4.1, o3, o4, gpt-5, gemini-pro/3
+function modelTier(m) {
+  const p  = (m.provider || '').toLowerCase();
+  const id = (m.model_identifier || '').toLowerCase();
+  // GLM is always last resort
+  if (/glm/.test(id)) return 1;
+  // Commercial flagship — tier 4
+  // Anthropic: all sonnet/opus/haiku 4.x are flagship except haiku (mid)
+  if (p === 'anthropic' && /claude-(opus|sonnet)/.test(id)) return 4;
+  // OpenAI: gpt-4o, gpt-4.1 (full), o3, o4-mini, gpt-5.x flagships
+  if (p === 'openai' && /gpt-4o(?!-mini)|gpt-4\.1(?!-mini|nano)|o3|o4-mini|gpt-5/.test(id)) return 4;
+  // Google: 2.5-pro, 3-flash, 3.1-pro, 3-pro are flagship
+  if (p === 'google' && /gemini-(2\.5-pro|3|3\.1)/.test(id)) return 4;
+  // Commercial mid — tier 3
+  if (p === 'anthropic' && /haiku/.test(id))             return 3;
+  if (p === 'openai'    && /gpt-4o-mini|gpt-4\.1-mini|gpt-4\.1-nano/.test(id)) return 3;
+  if (p === 'google'    && /flash/.test(id))             return 3;
+  if (p === 'groq')                                      return 3;
+  if (p === 'openrouter')                                return 3;
+  // Ollama: capable flag = tier 2, otherwise tier 1
+  if (p === 'ollama' || p === '') return m.is_capable ? 2 : 1;
+  // Any other commercial provider
+  return m.is_capable ? 3 : 1;
+}
 
-function selectBestModel(models) {
+// ── Analyse message + skills → required tier ─────────────────────────────────
+function analyseRequest(message, enabledSkills = []) {
+  const m = (message || '').toLowerCase();
+
+  // Intent detection runs first — message content is the primary signal
+  let intent = 'general';
+  let intentTier = 1;
+  for (const rule of INTENTS) {
+    if (rule.match(m)) { intent = rule.name; intentTier = rule.tier; break; }
+  }
+
+  // Skill min-tier is advisory: it only raises the tier if the message
+  // itself is already complex enough to warrant it (intentTier >= skill's tier - 1).
+  // This prevents a high-tier skill (e.g. webapp-testing=4) from routing
+  // a simple "hello world python" to a flagship model just because
+  // the user has that skill enabled.
+  let skillTier = 1;
+  for (const skill of (enabledSkills || [])) {
+    const minTier = SKILL_MIN_TIER[skill] || 0;
+    if (minTier > skillTier) skillTier = minTier;
+  }
+
+  // Only apply skill floor if the intent tier is close enough to warrant it
+  // (within 1 tier). A coding_task (tier 2) can be raised to tier 3 by a skill,
+  // but NOT to tier 4. A simple_question (tier 1) is never raised by skill floor.
+  const tier = skillTier <= intentTier + 1
+    ? Math.max(intentTier, skillTier)
+    : intentTier;
+
+  return { intent, tier };
+}
+
+// ── Select best available model for the required tier ────────────────────────
+function selectBestModel(models, message = '', enabledSkills = [], hasMcp = false) {
   if (!models || models.length === 0) return null;
-  // Simple: prefer capable models, then first available
-  const capable = models.find(m => m.is_capable);
-  const best = capable || models[0];
-  if (best) console.log(`[LLM Router] Using: "${best.name}" (${best.provider})`);
-  return best || null;
-}
-
-function shouldUseAgentTeam() {
-  return { useTeam: false, agentCount: 1, reason: 'community_single_agent',
-           intent: 'general', tier: 1, agentRoles: [], capabilityFlags: {} };
-}
-
-function analyseRequest(message) {
-  return { intent: 'general', tier: 1 };
+  const { intent, tier } = analyseRequest(message, enabledSkills);
+  // If MCP servers are active, prefer mcp_capable models first within the tier pool
+  const candidates = hasMcp
+    ? (models.filter(m => m.mcp_capable).length > 0 ? models.filter(m => m.mcp_capable) : models)
+    : models;
+  const scored = candidates.map(m => {
+    const mt = modelTier(m);
+    const id = (m.model_identifier || '').toLowerCase();
+    const isGlm = /glm/.test(id);
+    const delta = mt - tier;
+    const score = isGlm ? -100 : delta >= 0 ? 10 - delta : delta * 5;
+    return { m, score, mt };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0].m;
+  console.log(`[LLM Router] intent=${intent} tier=${tier} mcp=${hasMcp} → "${best.name}" (${best.provider}, modelTier=${scored[0].mt})`);
+  return best;
 }
 
 
@@ -693,6 +745,36 @@ async function runMigrations(retries = 15, delay = 2000) {
       OR provider IN ('anthropic','openai','google','groq','openrouter')
   `);
   console.log('[DB] mcp_capable flags updated');
+
+  // Migration: add has_vision column — true for models that accept image input
+  await pool.query(`ALTER TABLE model_configs ADD COLUMN IF NOT EXISTS has_vision BOOLEAN DEFAULT false`);
+  // All commercial providers support vision except specific reasoning-only models (o3)
+  await pool.query(`
+    UPDATE model_configs SET has_vision = true WHERE
+      provider IN ('anthropic', 'google', 'groq', 'openrouter')
+      OR (provider = 'openai' AND model_identifier NOT IN ('o3', 'o1'))
+  `);
+  await pool.query(`
+    UPDATE model_configs SET has_vision = false WHERE
+      provider = 'openai' AND model_identifier IN ('o3', 'o1')
+  `);
+  console.log('[DB] has_vision flags updated');
+
+  // Migration: add is_reasoning column — true for models that do their own chain-of-thought
+  // (o3, o4-mini, gemini-2.5-pro, gemini-3.x etc.)
+  // Note: Claude Code CLI handles its own reasoning loop — this flag is for UI display only.
+  // We never send reasoning_effort/thinking params to any model via LiteLLM.
+  await pool.query(`ALTER TABLE model_configs ADD COLUMN IF NOT EXISTS is_reasoning BOOLEAN DEFAULT false`);
+  await pool.query(`
+    UPDATE model_configs SET is_reasoning = true WHERE
+      -- OpenAI o-series
+      (provider = 'openai' AND (model_identifier LIKE 'o1%' OR model_identifier LIKE 'o3%' OR model_identifier LIKE 'o4%'))
+      -- Gemini 2.5+ and 3.x have built-in thinking
+      OR (provider = 'google' AND (model_identifier LIKE 'gemini-2.5-pro%' OR model_identifier LIKE 'gemini-3%'))
+      -- Claude Sonnet/Opus 4.5+ have extended thinking
+      OR (provider = 'anthropic' AND (model_identifier LIKE 'claude-sonnet-4-5%' OR model_identifier LIKE 'claude-opus-4%' OR model_identifier LIKE 'claude-sonnet-4-6%'))
+  `);
+  console.log('[DB] is_reasoning flags updated');
   // Migration: add auto_select to user_model_preferences (existing installs)
   await pool.query(`ALTER TABLE user_model_preferences ADD COLUMN IF NOT EXISTS auto_select BOOLEAN DEFAULT false`);
 
@@ -794,12 +876,6 @@ async function runMigrations(retries = 15, delay = 2000) {
       UNIQUE(user_id, name)
     );
     CREATE INDEX IF NOT EXISTS idx_user_mcp_servers_user_id ON user_mcp_servers(user_id);
-  `);
-
-  // Platform webhook users (synthetic users for Slack/Discord/WhatsApp/Zoho)
-  await pool.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT NULL;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_user_id VARCHAR(255) DEFAULT NULL;
   `);
 
   // Skills default to ENABLED — users may disable skills they don't want.
@@ -1250,7 +1326,7 @@ app.post('/api/models/sync', authMiddleware, async (req, res) => {
     
     // Return updated model list
     const result = await pool.query(
-      'SELECT id, name, description, provider, model_identifier, is_active, is_capable FROM model_configs WHERE is_active = true ORDER BY provider, name ASC'
+      'SELECT id, name, description, provider, model_identifier, is_active, is_capable, mcp_capable, has_vision, is_reasoning FROM model_configs WHERE is_active = true ORDER BY provider, name ASC'
     );
     
     res.json({ 
@@ -1394,6 +1470,55 @@ app.get('/api/share/:token', async (req, res) => {
   }
 });
 
+// --- Public: Download output file via share token (no auth required) ---
+// Only output files are downloadable via share links — never input/uploaded files
+// Use wildcard for filename — colons in timestamps break :param matching
+app.get('/api/share/:token/download/*', async (req, res) => {
+  try {
+    const token = req.params.token;
+    // Wildcard captures full filename including colons/timestamps
+    const filename = req.params[0];
+    const safeName = path.basename(decodeURIComponent(filename));
+    if (!safeName || safeName.includes('..')) {
+      return res.status(400).json({ error: 'Invalid filename.' });
+    }
+
+    // Validate token and get conversation + owner
+    const shareResult = await pool.query(
+      `SELECT cs.conversation_id, c.user_id
+       FROM conversation_shares cs
+       JOIN conversations c ON cs.conversation_id = c.id
+       WHERE cs.share_token = $1`,
+      [token]
+    );
+    if (shareResult.rows.length === 0) return res.status(404).json({ error: 'Share not found.' });
+    const { conversation_id, user_id } = shareResult.rows[0];
+
+    const filePath = path.join(`/srv/claude/users/${user_id}`, 'output', safeName);
+    console.log(`[Share Download] conv=${conversation_id} user=${user_id} file=${safeName} path=${filePath} exists=${fs.existsSync(filePath)}`);
+
+    // Check conversation_files table first
+    const fileRecord = await pool.query(
+      `SELECT filename FROM conversation_files
+       WHERE conversation_id = $1 AND folder = 'output' AND filename = $2`,
+      [conversation_id, safeName]
+    );
+    console.log(`[Share Download] DB record found: ${fileRecord.rows.length > 0}`);
+
+    // Serve if file physically exists — whether or not it's tracked in conversation_files
+    if (!fs.existsSync(filePath)) {
+      // Last resort: scan the user's entire output folder for the file
+      const outputDir = `/srv/claude/users/${user_id}/output`;
+      console.log(`[Share Download] File not at expected path. Output dir contents:`, fs.existsSync(outputDir) ? fs.readdirSync(outputDir).slice(0, 20) : 'DIR NOT FOUND');
+      return res.status(404).json({ error: 'File not found on disk.' });
+    }
+    res.download(filePath, safeName);
+  } catch (err) {
+    console.error('[Share Download]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Conversation Files: List files attached to a conversation ---
 app.get('/api/conversations/:id/files', authMiddleware, async (req, res) => {
   try {
@@ -1458,16 +1583,16 @@ app.post('/api/conversations/:id/link-uploads', authMiddleware, async (req, res)
 // --- LLM Router: Auto-select best model for message+skills ---
 app.post('/api/models/auto-select', authMiddleware, async (req, res) => {
   try {
-    const { message, enabledSkills } = req.body;
+    const { message, enabledSkills, hasMcp } = req.body;
     const modelsResult = await pool.query(
-      `SELECT id, name, description, provider, model_identifier, is_capable, 
+      `SELECT id, name, description, provider, model_identifier, is_capable, mcp_capable,
               requires_api_key AND default_api_key IS NULL AS needs_user_key
        FROM model_configs WHERE is_active = true`
     );
     const models = modelsResult.rows;
     // Filter to only models the user can use (no user key needed if server key present)
     const usable = models.filter(m => !m.needs_user_key);
-    const best = selectBestModel(usable, message || '', enabledSkills || []);
+    const best = selectBestModel(usable, message || '', enabledSkills || [], !!hasMcp);
     if (!best) return res.json({ modelId: null, reason: 'No models available' });
 
     const tier = (() => {
@@ -1600,20 +1725,31 @@ app.get('/api/files', authMiddleware, (req, res) => {
 });
 
 // --- Download File ---
-app.get('/api/files/download/:folder/:filename', authMiddleware, (req, res) => {
+// Use wildcard for filename — Express :param stops at colons, breaking
+// filenames like screenshot-2026-03-24T16-53-07.png
+app.get('/api/files/download/:folder/*', authMiddleware, (req, res) => {
   try {
-    const { folder, filename } = req.params;
+    const folder = req.params.folder;
+    // Wildcard captures everything after /folder/ including colons
+    const filename = req.params[0];
     if (folder !== 'input' && folder !== 'output') {
       return res.status(400).json({ error: 'Folder must be "input" or "output".' });
     }
-    // Path traversal prevention
-    const safeName = path.basename(filename);
-    if (safeName !== filename || filename.includes('..')) {
+    // Path traversal prevention — basename strips any directory components
+    const safeName = path.basename(decodeURIComponent(filename));
+    if (!safeName || safeName.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename.' });
     }
 
     const filePath = path.join(`/srv/claude/users/${req.userId}`, folder, safeName);
+    console.log(`[Download] userId=${req.userId} folder=${folder} file=${safeName} path=${filePath} exists=${fs.existsSync(filePath)}`);
+
     if (!fs.existsSync(filePath)) {
+      // File not in expected path — scan the user's folder to help diagnose
+      const dir = path.join(`/srv/claude/users/${req.userId}`, folder);
+      const dirExists = fs.existsSync(dir);
+      const contents = dirExists ? fs.readdirSync(dir).filter(f => f.includes(safeName.split('_')[0])).slice(0, 10) : [];
+      console.log(`[Download] Dir exists: ${dirExists}, similar files: ${JSON.stringify(contents)}`);
       return res.status(404).json({ error: 'File not found.' });
     }
 
@@ -1624,35 +1760,16 @@ app.get('/api/files/download/:folder/:filename', authMiddleware, (req, res) => {
   }
 });
 
-// --- Platform File Download (token-free, for Zoho/Slack/Discord links) ---
-// Uses a short-lived signed token generated at time of file creation.
-// Token = base64(userId:filename:timestamp) signed with JWT_SECRET — expires in 24h.
-app.get('/api/platform/files/:token/:filename', (req, res) => {
-  try {
-    const { token, filename } = req.params;
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded.userId || !decoded.filename || decoded.filename !== path.basename(filename)) {
-      return res.status(403).json({ error: 'Invalid token' });
-    }
-    const safeName = path.basename(filename);
-    const filePath = path.join(`/srv/claude/users/${decoded.userId}`, 'output', safeName);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
-    res.download(filePath, safeName);
-  } catch (err) {
-    res.status(403).json({ error: 'Invalid or expired token' });
-  }
-});
-
 // --- Delete File ---
-app.delete('/api/files/:folder/:filename', authMiddleware, (req, res) => {
+app.delete('/api/files/:folder/*', authMiddleware, (req, res) => {
   try {
-    const { folder, filename } = req.params;
+    const folder = req.params.folder;
+    const filename = req.params[0];
     if (folder !== 'input' && folder !== 'output') {
       return res.status(400).json({ error: 'Folder must be "input" or "output".' });
     }
-    const safeName = path.basename(filename);
-    if (safeName !== filename || filename.includes('..')) {
+    const safeName = path.basename(decodeURIComponent(filename));
+    if (!safeName || safeName.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename.' });
     }
 
@@ -2034,7 +2151,7 @@ app.post('/api/chat', authMiddleware, chatLimiter, async (req, res) => {
 // Client reads via fetch() + response.body.getReader() (POST + SSE pattern).
 app.post('/api/chat/stream', authMiddleware, chatLimiter, async (req, res) => {
   const userId = req.userId;
-  const { message, conversationId, enabledSkills, enabledPlugins, agentTeam, agentCount } = req.body;
+  const { message, conversationId, enabledSkills, enabledPlugins } = req.body;
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'Message is required.' });
@@ -2075,10 +2192,7 @@ app.post('/api/chat/stream', authMiddleware, chatLimiter, async (req, res) => {
       const baseDir = `/srv/claude/users/${userId}`;
       const newOutputFiles = []; // tracks output files created in THIS response only
 
-      // IMPORTANT: only 'input' and 'output' are scanned — 'agent_input' and
-      // 'agent_output' are intentionally excluded. Those folders hold intermediate
-      // phase-1 JSON blobs used internally by the agent team and must never appear
-      // in the user's file panel or be downloadable.
+      // IMPORTANT: only 'input' and 'output' are scanned.
       for (const folder of ['input', 'output']) {
         const dir = `${baseDir}/${folder}`;
         try {
@@ -2326,12 +2440,13 @@ app.post('/api/chat/stream', authMiddleware, chatLimiter, async (req, res) => {
     if (userAutoSelect) {
       // AUTO MODE: run intent detection + router to pick best model per-message
       const allModelsResult = await pool.query(`
-        SELECT id, name, provider, model_identifier, api_endpoint, default_api_key, is_capable,
+        SELECT id, name, provider, model_identifier, api_endpoint, default_api_key, is_capable, mcp_capable,
                requires_api_key AND default_api_key IS NULL AS needs_user_key
         FROM model_configs WHERE is_active = true
       `);
       const usableModels = allModelsResult.rows.filter(m => !m.needs_user_key);
-      const bestModel = selectBestModel(usableModels, message, enabledSkills);
+      const hasMcp = userMcpServers && userMcpServers.length > 0;
+      const bestModel = selectBestModel(usableModels, message, enabledSkills, hasMcp);
 
       if (bestModel) {
         modelConfig = {
@@ -2442,186 +2557,7 @@ app.post('/api/chat/stream', authMiddleware, chatLimiter, async (req, res) => {
       }
     }
 
-    // ── Execution plan — LLM-driven intent planner ──────────────────────────────
-    const mcpNamesForPlan = userMcpServers.map(s => s.name);
-
-    // Collect attached file metadata for the planner
-    const attachedFileMeta = (() => {
-      try {
-        const inputDir = `/srv/claude/users/${userId}/input`;
-        if (!require('fs').existsSync(inputDir)) return [];
-        return require('fs').readdirSync(inputDir).map(f => ({
-          name: f,
-          type: require('path').extname(f).replace('.', '') || 'unknown',
-        }));
-      } catch { return []; }
-    })();
-
-    // ── Multi-turn: load prior execution context if this is Turn 2+ ──────────
-    const priorContext = convId ? await loadExecutionContext(pool, convId) : null;
-
-    let intentPlan  = null;
-    let turnMode    = 'NEW';   // NEW | PATCH | EXTEND | REBUILD
-
-    if (priorContext) {
-      // Turn 2+: classify what the user wants relative to prior work
-      let models = [];
-      try {
-        const mr = await pool.query('SELECT id, name, provider, model_identifier, api_endpoint, default_api_key, is_capable, is_active FROM model_configs WHERE is_active = true');
-        models = mr.rows;
-      } catch {}
-
-      const classification = await classifyTurnIntent(pool, message, priorContext, models);
-      turnMode = classification.mode;
-
-      emit('plan_status', { icon: '🔄', text: `Turn context loaded — mode: ${turnMode} (${classification.reason})` });
-      console.log(`[Plan] Turn mode: ${turnMode} — ${classification.reason}`);
-
-      if (turnMode === 'PATCH') {
-        // Targeted change — single synthesis agent with injected prior context
-        // No planner call, no parallel agents needed
-        emit('plan_status', { icon: '🩹', text: 'PATCH mode — targeted change, skipping re-analysis' });
-        intentPlan = {
-          intent:    `PATCH: ${message}`,
-          complexity: 'simple',
-          _meta:     { generator: 'patch-router', validator: 'none' },
-          phases: [{
-            phase: 1,
-            mode:  'synthesis',
-            steps: [{
-              id:           1,
-              task:         buildPatchTask(message, priorContext),
-              driven_by:    'patch-router',
-              input_files:  ['ALL_PRIOR_OUTPUTS'],
-              output_schema: '',
-              dependsOn:    [],
-              canRunInParallel: false,
-            }],
-          }],
-        };
-      } else if (turnMode === 'EXTEND') {
-        // New workstream on top of existing — re-plan but inject prior context
-        emit('plan_status', { icon: '➕', text: 'EXTEND mode — planning new workstream on top of prior output' });
-        try {
-          const extendedMessage = buildExtendContext(message, priorContext);
-          intentPlan = await buildIntentPlan(
-            pool, extendedMessage, attachedFileMeta,
-            enabledSkills, activePlugins, userMcpServers, pluginManager, emit
-          );
-        } catch (planErr) {
-          console.warn(`[Plan] EXTEND planner failed: ${planErr.message} — single agent`);
-          intentPlan = null;
-        }
-      } else {
-        // REBUILD — full re-plan from scratch, ignore prior context
-        emit('plan_status', { icon: '🔁', text: 'REBUILD mode — starting fresh plan' });
-        try {
-          intentPlan = await buildIntentPlan(
-            pool, message, attachedFileMeta,
-            enabledSkills, activePlugins, userMcpServers, pluginManager, emit
-          );
-        } catch (planErr) {
-          console.warn(`[Plan] REBUILD planner failed: ${planErr.message} — single agent`);
-          intentPlan = null;
-        }
-      }
-    } else {
-      // Turn 1 — fresh plan
-      try {
-        intentPlan = await buildIntentPlan(
-          pool, message, attachedFileMeta,
-          enabledSkills, activePlugins, userMcpServers, pluginManager,
-          emit
-        );
-      } catch (planErr) {
-        console.warn(`[Plan] Planner threw unexpectedly: ${planErr.message} — single agent`);
-        intentPlan = null;
-      }
-    }
-
-    // Fall back to heuristic plan for tier/intent detection (model selection still needs it)
-    const execPlan = buildExecutionPlan(message, enabledSkills, activePlugins, mcpNamesForPlan);
-    console.log(`[Plan] tier=${execPlan.tier} intent=${execPlan.intent} | intentPlan=${intentPlan ? intentPlan.phases?.length + ' phases' : 'null→single'}`);
-
-    // IDE/API callers may force team mode; intentPlan drives it otherwise
-    const runAsTeam = (intentPlan !== null) || (agentTeam === true);
-
-    if (runAsTeam) {
-      const teamAgentCount = intentPlan
-        ? Math.max(...(intentPlan.phases || []).map(p => (p.steps || []).length), 1)
-        : execPlan.agentCount;
-      emit('thinking', { step: 'agent_team_start', text: 'Working on this...', icon: '⚡' });
-      let teamReply = '';
-      try {
-        const teamResult = await agentTeamManager.runTeam(containerName, {
-          task:          message,
-          systemContext,
-          modelConfig,
-          executionPlan: intentPlan,           // ← new: structured phase plan
-          agentCount:    teamAgentCount,
-          agentRoles:    execPlan.agentRoles,  // legacy fallback roles
-          userId,
-          onChunk: (sseChunk) => {
-            for (const line of sseChunk.split('\n')) {
-              if (!line.startsWith('data: ')) continue;
-              try {
-                const evt = JSON.parse(line.slice(6));
-                if (evt.type === 'agent_text')   { emit('agent_text', { text: evt.text }); teamReply += evt.text; }
-                if (evt.type === 'agent_spawn')  emit('thinking', { step: 'working', text: 'Working...', icon: '⚡' });
-                if (evt.type === 'tool_call')    emit('tool_call', { name: evt.name });
-                if (evt.type === 'final_result') { emit('agent_text', { text: evt.text }); teamReply = evt.text || teamReply; }
-                if (evt.type === 'plan_status')  emit('plan_status', { icon: evt.icon, text: evt.text });
-              } catch {}
-            }
-          },
-        });
-        if (!teamReply && teamResult.stdout) teamReply = teamResult.stdout.trim();
-      } catch (teamErr) {
-        const e = teamErr.error || teamErr;
-        if (e.killed) {
-          emit('error', { message: 'Request timed out. Please try breaking it into smaller tasks.' });
-          cleanup(); if (!res.writableEnded) res.end(); return;
-        }
-        // Team failed — fall through to single agent
-        console.warn(`[AgentTeam] Team failed (${e.message}), falling back to single agent`);
-        res._teamFallback = { reason: intentPlan ? 'intent_plan_runtime_error' : execPlan.reason, agent_count: teamAgentCount, error: e.message };
-      }
-      if (teamReply) {
-        const teamElapsed = (Date.now() - startTime) / 1000;
-        const teamMeta = JSON.stringify({
-          elapsed_seconds: teamElapsed,
-          team: {
-            used: true,
-            agent_count: teamAgentCount,
-            intent_plan: intentPlan ? { phases: intentPlan.phases?.length, intent: intentPlan.intent, generator: intentPlan._meta?.generator, validator: intentPlan._meta?.validator } : null,
-            reason:      intentPlan ? 'intent_based_plan' : execPlan.reason,
-            turn_mode:   turnMode || 'NEW',
-            agent_roles: execPlan.agentRoles,
-            capability_flags: execPlan.capabilityFlags,
-            fallback: false,
-          },
-          model: modelConfig ? { identifier: modelConfig.model_identifier, provider: modelConfig.provider } : null,
-          skills: enabledSkills || [],
-          plugins: activePlugins || [],
-          mcp_servers: mcpNamesForPlan || [],
-        });
-        await pool.query('INSERT INTO messages (conversation_id, role, content, metadata) VALUES ($1,$2,$3,$4)', [convId, 'assistant', teamReply, teamMeta]);
-        await pool.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [convId]);
-        await snapshotConversationFiles(convId, userId, workspaceBeforeSnapshot);
-
-        // ── Async post-turn summarizer (fire-and-forget, never blocks response) ──
-        // Skipped for PATCH turns — prior context is still valid, nothing new to summarize.
-        if (intentPlan && intentPlan.phases && turnMode !== 'PATCH') {
-          const phase1Outputs = agentTeamManager._lastPhase1Outputs || [];
-          pool.query('SELECT id, name, provider, model_identifier, api_endpoint, default_api_key, is_capable, is_active FROM model_configs WHERE is_active = true')
-            .then(mr => summarizeExecution(pool, convId, userId, message, phase1Outputs, teamReply, intentPlan, mr.rows))
-            .catch(e => console.warn('[Summarizer] Fire-and-forget error:', e.message));
-        }
-
-        emit('done', { conversationId: convId, reply: teamReply });
-        cleanup(); if (!res.writableEnded) res.end(); return;
-      }
-    }
+    // Community Edition — single agent only, no execution planner
 
     // Attach MCP config so containerManager can pass --mcp-config
     if (mcpConfigJson) {
@@ -2723,16 +2659,43 @@ app.post('/api/chat/stream', authMiddleware, chatLimiter, async (req, res) => {
         const endpoint = (modelConfig?.api_endpoint || '').replace(/\/+$/, '') || undefined;
         const health = await containerManager.checkOllamaHealth(containerName, endpoint, modelConfig?.provider);
         if (!health.ok) {
-          emit('error', { message: `Cannot reach model endpoint (${health.reason}). Make sure the model server is running.` });
+          const healthMsg = `Cannot reach model endpoint (${health.reason}). Make sure the model server is running.`;
+          emit('error', { message: healthMsg });
+          try {
+            const failMeta = JSON.stringify({
+              elapsed_seconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
+              error: true,
+              error_type: 'endpoint_unreachable',
+              error_message: healthMsg,
+              model: modelConfig ? { identifier: modelConfig.model_identifier, provider: modelConfig.provider } : null,
+            });
+            await pool.query(
+              'INSERT INTO messages (conversation_id, role, content, metadata) VALUES ($1,$2,$3,$4)',
+              [convId, 'assistant', '', failMeta]
+            );
+          } catch (_) {}
           res.end();
           return cleanup();
         }
       }
-      if (execErr.killed) {
-        emit('error', { message: 'Request timed out. Please try a shorter or simpler message.' });
-      } else {
-        emit('error', { message: 'Agent execution failed. Please try again.' });
-      }
+      const errMsg = execErr.killed
+        ? 'Request timed out. Please try a shorter or simpler message.'
+        : 'Agent execution failed. Please try again.';
+      emit('error', { message: errMsg });
+      // Record the failed response in DB so dashboards can track it
+      try {
+        const failMeta = JSON.stringify({
+          elapsed_seconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
+          error: true,
+          error_type: execErr.killed ? 'timeout' : 'execution_failed',
+          error_message: errMsg,
+          model: modelConfig ? { identifier: modelConfig.model_identifier, provider: modelConfig.provider } : null,
+        });
+        await pool.query(
+          'INSERT INTO messages (conversation_id, role, content, metadata) VALUES ($1,$2,$3,$4)',
+          [convId, 'assistant', '', failMeta]
+        );
+      } catch (_) {}
       res.end();
       return cleanup();
     }
@@ -2957,31 +2920,10 @@ app.post('/api/chat/stream', authMiddleware, chatLimiter, async (req, res) => {
         identifier: modelConfig.model_identifier,
         provider: modelConfig.provider
       } : null,
-      // Execution plan — always present so admin can query team vs single-agent usage
-      team: res._teamFallback ? {
-        used: false,
-        fallback: true,
-        fallback_reason: res._teamFallback.reason,
-        fallback_error: res._teamFallback.error,
-        intended_agent_count: res._teamFallback.agent_count,
-      } : {
-        used: false,
-        fallback: false,
-        planned_team: runAsTeam || false,
-      },
-      plan: {
-        tier:             execPlan.tier,
-        intent:           intentPlan?.intent || execPlan.intent,
-        reason:           intentPlan ? 'intent_based_plan' : execPlan.reason,
-        turn_mode:        turnMode || 'NEW',
-        phases:           intentPlan?.phases?.length || 1,
-        generator:        intentPlan?._meta?.generator || null,
-        validator:        intentPlan?._meta?.validator || null,
-        capability_flags: execPlan.capabilityFlags,
-      },
+      team: { used: false },
       skills: enabledSkills || [],
       plugins: activePlugins || [],
-      mcp_servers: mcpNamesForPlan || [],
+      mcp_servers: userMcpServers.map(s => s.name) || [],
     };
 
     // Save assistant response with metadata and update conversation
@@ -3089,7 +3031,16 @@ app.get('/api/admin/overview', adminMiddleware, async (req, res) => {
         (SELECT COALESCE(SUM(size), 0) FROM conversation_files WHERE folder = 'output') AS total_output_bytes,
         (SELECT COUNT(*) FROM conversation_shares) AS total_shares,
         (SELECT COUNT(DISTINCT user_id) FROM messages m JOIN conversations c ON m.conversation_id = c.id WHERE m.created_at > NOW() - INTERVAL '24 hours') AS active_users_24h,
-        (SELECT COUNT(DISTINCT user_id) FROM messages m JOIN conversations c ON m.conversation_id = c.id WHERE m.created_at > NOW() - INTERVAL '7 days') AS active_users_7d
+        (SELECT COUNT(DISTINCT user_id) FROM messages m JOIN conversations c ON m.conversation_id = c.id WHERE m.created_at > NOW() - INTERVAL '7 days') AS active_users_7d,
+        (SELECT COUNT(*) FROM messages WHERE role = 'assistant' AND (
+          content = ''
+          OR (metadata->>'error')::boolean = true
+          OR content ILIKE 'An unexpected error occurred%'
+          OR content ILIKE 'Request timed out%'
+          OR content ILIKE 'Agent execution failed%'
+          OR content ILIKE 'Cannot reach model endpoint%'
+          OR content = 'No response received.'
+        )) AS failed_responses
     `);
     res.json(kpis);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -3099,6 +3050,14 @@ app.get('/api/admin/overview', adminMiddleware, async (req, res) => {
 app.get('/api/admin/activity/daily', adminMiddleware, async (req, res) => {
   try {
     const days = Math.min(parseInt(req.query.days || '30', 10), 365);
+
+    // Step 1: find the first message date separately so we can pass it as a clean param
+    const { rows: [firstMsg] } = await pool.query(
+      `SELECT MIN(DATE(created_at))::text AS first_date FROM messages`
+    );
+    // Use the later of: first DB date vs today-N so we never show pre-DB empty rows
+    const windowStart = firstMsg?.first_date || null;
+
     const { rows } = await pool.query(`
       SELECT
         d::date AS date,
@@ -3106,27 +3065,43 @@ app.get('/api/admin/activity/daily', adminMiddleware, async (req, res) => {
         COALESCE(msg.tokens, 0) AS tokens,
         COALESCE(msg.avg_secs, 0) AS avg_response_secs,
         COALESCE(usr.cnt, 0) AS new_users,
-        COALESCE(conv.cnt, 0) AS new_conversations
-      FROM generate_series(NOW() - INTERVAL '1 day' * ($1-1), NOW(), '1 day') d
+        COALESCE(conv.cnt, 0) AS new_conversations,
+        COALESCE(msg.failed, 0) AS failed_responses
+      FROM generate_series(
+        GREATEST(
+          COALESCE($2::date, NOW()::date - ($1 - 1) * INTERVAL '1 day'),
+          NOW()::date - ($1 - 1) * INTERVAL '1 day'
+        ),
+        NOW()::date,
+        '1 day'
+      ) d
       LEFT JOIN (
         SELECT DATE(m.created_at) AS day, COUNT(*) AS cnt,
                COALESCE(SUM((m.metadata->'tokens'->>'total_tokens')::bigint), 0) AS tokens,
-               COALESCE(AVG((m.metadata->>'elapsed_seconds')::numeric), 0) AS avg_secs
-        FROM messages m WHERE m.created_at >= NOW() - INTERVAL '1 day' * $1 AND m.role = 'assistant'
+               COALESCE(AVG((m.metadata->>'elapsed_seconds')::numeric), 0) AS avg_secs,
+               COUNT(*) FILTER (WHERE m.content = ''
+          OR (m.metadata->>'error')::boolean = true
+          OR m.content ILIKE 'An unexpected error occurred%'
+          OR m.content ILIKE 'Request timed out%'
+          OR m.content ILIKE 'Agent execution failed%'
+          OR m.content ILIKE 'Cannot reach model endpoint%'
+          OR m.content = 'No response received.') AS failed
+        FROM messages m WHERE m.role = 'assistant'
         GROUP BY 1
       ) msg ON msg.day = d::date
       LEFT JOIN (
-        SELECT DATE(created_at) AS day, COUNT(*) AS cnt FROM users
-        WHERE created_at >= NOW() - INTERVAL '1 day' * $1 GROUP BY 1
+        SELECT DATE(created_at) AS day, COUNT(*) AS cnt FROM users GROUP BY 1
       ) usr ON usr.day = d::date
       LEFT JOIN (
-        SELECT DATE(created_at) AS day, COUNT(*) AS cnt FROM conversations
-        WHERE created_at >= NOW() - INTERVAL '1 day' * $1 GROUP BY 1
+        SELECT DATE(created_at) AS day, COUNT(*) AS cnt FROM conversations GROUP BY 1
       ) conv ON conv.day = d::date
-      ORDER BY d
-    `, [days]);
+      ORDER BY d ASC
+    `, [days, windowStart]);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[Admin] activity/daily error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Admin: Model usage stats ---
@@ -3137,6 +3112,13 @@ app.get('/api/admin/models/usage', adminMiddleware, async (req, res) => {
         COALESCE(metadata->'model'->>'identifier', 'unknown') AS model_identifier,
         COALESCE(metadata->'model'->>'provider', 'unknown') AS provider,
         COUNT(*) AS message_count,
+        COUNT(*) FILTER (WHERE (m.content = ''
+          OR (m.metadata->>'error')::boolean = true
+          OR m.content ILIKE 'An unexpected error occurred%'
+          OR m.content ILIKE 'Request timed out%'
+          OR m.content ILIKE 'Agent execution failed%'
+          OR m.content ILIKE 'Cannot reach model endpoint%'
+          OR m.content = 'No response received.')) AS failed_responses,
         COALESCE(SUM((metadata->'tokens'->>'total_tokens')::bigint), 0) AS total_tokens,
         COALESCE(SUM((metadata->'tokens'->>'input_tokens')::bigint), 0) AS input_tokens,
         COALESCE(SUM((metadata->'tokens'->>'output_tokens')::bigint), 0) AS output_tokens,
@@ -3175,6 +3157,13 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
         COALESCE(u.created_at, NOW()) AS created_at,
         COUNT(DISTINCT c.id) AS total_conversations,
         COUNT(DISTINCT m.id) AS total_messages,
+        COUNT(DISTINCT m.id) FILTER (WHERE (m.content = ''
+          OR (m.metadata->>'error')::boolean = true
+          OR m.content ILIKE 'An unexpected error occurred%'
+          OR m.content ILIKE 'Request timed out%'
+          OR m.content ILIKE 'Agent execution failed%'
+          OR m.content ILIKE 'Cannot reach model endpoint%'
+          OR m.content = 'No response received.')) AS failed_responses,
         COALESCE(SUM((m.metadata->'tokens'->>'total_tokens')::bigint), 0) AS total_tokens,
         COALESCE(AVG((m.metadata->>'elapsed_seconds')::numeric), 0) AS avg_response_secs,
         MAX(m.created_at) AS last_active,
@@ -3237,6 +3226,13 @@ app.get('/api/admin/users/:id', adminMiddleware, async (req, res) => {
       SELECT COALESCE(m.metadata->'model'->>'identifier', 'unknown') AS model,
              COALESCE(m.metadata->'model'->>'provider', 'unknown') AS provider,
              COUNT(*) AS cnt,
+             COUNT(*) FILTER (WHERE (m.content = ''
+          OR (m.metadata->>'error')::boolean = true
+          OR m.content ILIKE 'An unexpected error occurred%'
+          OR m.content ILIKE 'Request timed out%'
+          OR m.content ILIKE 'Agent execution failed%'
+          OR m.content ILIKE 'Cannot reach model endpoint%'
+          OR m.content = 'No response received.')) AS failed,
              COALESCE(SUM((m.metadata->'tokens'->>'total_tokens')::bigint), 0) AS tokens
       FROM messages m JOIN conversations c ON m.conversation_id = c.id
       WHERE c.user_id = $1 AND m.role = 'assistant' AND m.metadata IS NOT NULL
@@ -3345,87 +3341,11 @@ app.get('/api/admin/activity/recent', adminMiddleware, async (req, res) => {
 // === END ADMIN API ===
 // ============================================================
 
-// ============================================================
-// === AGENT TEAM + INFRASTRUCTURE ADMIN API ==================
-// ============================================================
-
-// --- Admin: Agent team usage stats ---
-
-
-
-app.post('/api/chat/agent-team', authMiddleware, chatLimiter, async (req, res) => {
-  const userId = req.userId;
-  const { message, conversationId, enabledSkills, enabledPlugins, agentCount } = req.body;
-  if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Message is required.' });
-
-  try {
-    let convId = conversationId ? parseInt(conversationId, 10) : null;
-    if (!convId) {
-      const title  = message.substring(0, 50) + (message.length > 50 ? '...' : '');
-      const result = await pool.query('INSERT INTO conversations (user_id, title) VALUES ($1,$2) RETURNING id', [userId, title]);
-      convId = result.rows[0].id;
-    }
-    await pool.query('INSERT INTO messages (conversation_id, role, content) VALUES ($1,$2,$3)', [convId, 'user', message]);
-
-    const containerName = await containerManager.ensureContainer(userId);
-
-    // Build system context
-    let systemContext = CAPABLE_SYSTEM_PROMPT;
-    const skillsPrompt = getEnabledSkillsPrompt(enabledSkills);
-    if (skillsPrompt) systemContext += skillsPrompt;
-    const activePlugins = enabledPlugins && Array.isArray(enabledPlugins) ? enabledPlugins : [];
-    if (activePlugins.length) systemContext += pluginManager.getEnabledPluginsPrompt(activePlugins);
-
-    // Resolve model
-    const modelRes = await pool.query(`
-      SELECT mc.api_endpoint, mc.model_identifier, mc.provider, mc.default_api_key, mc.is_capable, mc.mcp_capable, ump.user_api_key
-      FROM user_model_preferences ump
-      JOIN model_configs mc ON ump.model_config_id = mc.id
-      WHERE ump.user_id = $1 AND mc.is_active = true
-    `, [userId]);
-    const modelRow = modelRes.rows[0];
-    const modelConfig = modelRow ? {
-      api_endpoint: modelRow.api_endpoint, model_identifier: modelRow.model_identifier,
-      provider: modelRow.provider, is_capable: modelRow.is_capable, mcp_capable: modelRow.mcp_capable,
-      api_key: modelRow.user_api_key || modelRow.default_api_key || 'dummy-key',
-    } : null;
-
-    // Auto-detect optimal agent count from message complexity.
-    // Callers may pass agentCount as a hint, but auto-detection overrides unless
-    // the caller explicitly passes agentCount AND it's higher than the auto value.
-    const { intent: _ri, tier: _rt } = analyseRequest(message, enabledSkills || []);
-    const { agentCount: autoCount } = shouldUseAgentTeam(message, _ri, _rt, enabledSkills || []);
-    const teamCount = Math.min(Math.max(
-      typeof agentCount === 'number' ? Math.max(agentCount, autoCount) : autoCount,
-      2), 5);
-    console.log(`[AgentTeam REST] intent=${_ri}, autoCount=${autoCount}, teamCount=${teamCount}`);
-
-    let teamReply = '';
-    const teamResult = await agentTeamManager.runTeam(containerName, {
-      task: message, systemContext, modelConfig, agentCount: teamCount, userId,
-    });
-    teamReply = teamResult.stdout.trim() || '(no output)';
-
-    await pool.query('INSERT INTO messages (conversation_id, role, content) VALUES ($1,$2,$3)', [convId, 'assistant', teamReply]);
-    await pool.query('UPDATE conversations SET updated_at = NOW() WHERE id = $1', [convId]);
-    res.json({ reply: teamReply, conversationId: convId });
-  } catch (err) {
-    console.error('[AgentTeam] Error:', err.message || err);
-    res.status(500).json({ error: 'Agent team execution failed.' });
-  }
-});
-
 // --- Start server ---
 const PORT = 5000;
 runMigrations()
   .then(() => {
     containerManager.cleanupOrphaned();
-
-    // Wire platform router — inject pool + runAgent helper.
-    // Automatically uses team mode for complex tasks — same logic as the stream endpoint.
-    // runAgentForPlatform not included in Community Edition
-    // Platform channel integration not included in Community Edition
-    console.log('[Platform] Chat platform webhook router initialised');
 
     // Periodic auto-sync removed — avoids unnecessary API calls every 6h.
     // Models sync on startup and via manual trigger: POST /api/models/sync

@@ -114,42 +114,119 @@ async function syncOllamaModels(pool) {
 }
 
 /**
+ * Determine if a model supports image input (vision).
+ * Source: official provider docs (March 2026)
+ * - All Anthropic Claude 4.x: yes
+ * - All Gemini models: yes (natively multimodal)
+ * - OpenAI: all except o3 and o1 (text-only reasoning models)
+ * - Groq / OpenRouter: assume yes (served models generally support vision)
+ * - Ollama: no by default (admin can enable manually)
+ */
+/**
+ * Determine if a model does its own chain-of-thought reasoning.
+ * Reasoning models think before responding — this improves response quality
+ * for complex tasks, complementing Claude Code CLI's own agentic loop.
+ * This flag is for UI display and admin insight only — we never send
+ * reasoning_effort params to any model (LiteLLM drops them globally).
+ */
+function modelIsReasoning(provider, modelIdentifier) {
+  const p  = (provider || '').toLowerCase();
+  const id = (modelIdentifier || '').toLowerCase();
+  if (p === 'openai')     return /^o1|^o3|^o4/.test(id);
+  if (p === 'google')     return /gemini-(2\.5-pro|3)/.test(id);
+  if (p === 'anthropic')  return /claude-(sonnet-4-5|sonnet-4-6|opus-4)/.test(id);
+  return false;
+}
+
+function modelHasVision(provider, modelIdentifier) {
+  const p  = (provider || '').toLowerCase();
+  const id = (modelIdentifier || '').toLowerCase();
+  if (p === 'ollama') return false;
+  if (p === 'openai') return !/^o3|^o1(?!-)/.test(id); // o3 and o1 are text-only
+  return true; // anthropic, google, groq, openrouter — all support vision
+}
+
+/**
  * Sync external API providers from .env
  */
 async function syncExternalProviders(pool) {
   console.log('[ModelSync] Syncing external API providers...');
   
+  // ── LiteLLM proxy endpoint — all non-Ollama/Anthropic providers route through here
+  // Model identifiers must match model_name aliases in litellm_config.yaml
+  const litellmUrl = process.env.LITELLM_URL || 'http://litellm:4000';
+
   const providers = [
     {
+      // OpenAI models — routed via LiteLLM proxy
+      // Model IDs match litellm_config.yaml aliases (bare names, no openai/ prefix)
+      // Source: https://platform.openai.com/docs/models (March 2026)
       name: 'OpenAI',
       envPrefix: 'OPENAI',
-      defaultUrl: 'https://api.openai.com/v1',
-      defaultModels: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo']
+      defaultUrl: litellmUrl,
+      defaultModels: [
+        'gpt-4o',          // GPT-4o — multimodal flagship
+        'gpt-4o-mini',     // GPT-4o Mini — fast, affordable
+        'gpt-4.1',         // GPT-4.1 — best coding + instruction following
+        'gpt-4.1-mini',    // GPT-4.1 Mini — efficient, near 4.1 quality
+        'gpt-4.1-nano',    // GPT-4.1 Nano — lowest cost
+        'o3',              // o3 — deep reasoning
+        'o4-mini',         // o4-mini — fast reasoning, best-in-class STEM
+      ]
     },
     {
+      // Anthropic models — routed directly (not via LiteLLM)
+      // Source: https://docs.anthropic.com/en/docs/about-claude/models/overview (March 2026)
       name: 'Anthropic',
       envPrefix: 'ANTHROPIC',
       defaultUrl: 'https://api.anthropic.com',
-      defaultModels: ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229']
+      defaultModels: [
+        'claude-opus-4-6',          // Opus 4.6 — most intelligent, 1M context, agents
+        'claude-sonnet-4-6',        // Sonnet 4.6 — best speed/intelligence balance
+        'claude-sonnet-4-5-20250929', // Sonnet 4.5 — previous generation
+        'claude-haiku-4-5-20251001',  // Haiku 4.5 — fastest, near-frontier, cheapest
+      ]
     },
     {
+      // Gemini models — routed via LiteLLM proxy
+      // Model IDs match litellm_config.yaml aliases (bare names, no gemini/ prefix)
+      // Source: https://ai.google.dev/gemini-api/docs/models (March 2026)
+      // Note: gemini-3-pro-preview shut down Mar 9 2026, use gemini-3.1-pro-preview
+      //       gemini-2.0-flash retiring Jun 1 2026
       name: 'Google',
-      envPrefix: 'GOOGLE',
-      defaultUrl: 'https://generativelanguage.googleapis.com/v1beta',
-      // Updated Feb 2026: gemini-2.0-flash-exp removed, 1.5 models deprecated
-      defaultModels: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
+      envPrefix: 'GEMINI',
+      defaultUrl: litellmUrl,
+      defaultModels: [
+        'gemini-2.5-pro',            // Gemini 2.5 Pro — most capable, GA
+        'gemini-2.5-flash',          // Gemini 2.5 Flash — fast + smart, GA
+        'gemini-2.5-flash-lite',     // Gemini 2.5 Flash-Lite — cost-efficient, GA
+        'gemini-3-flash-preview',    // Gemini 3 Flash — frontier-class at Flash speed/price
+        'gemini-3.1-pro-preview',    // Gemini 3.1 Pro — latest reasoning-first model
+      ]
     },
     {
+      // Groq models — routed via LiteLLM proxy
+      // Source: https://console.groq.com/docs/models (March 2026)
       name: 'Groq',
       envPrefix: 'GROQ',
-      defaultUrl: 'https://api.groq.com/openai/v1',
-      defaultModels: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768']
+      defaultUrl: litellmUrl,
+      defaultModels: [
+        'llama-3.3-70b-versatile',  // Best Groq model for general tasks
+        'llama-3.1-8b-instant',     // Ultra-fast, low latency
+      ]
     },
     {
+      // OpenRouter — access to hundreds of models via one key
+      // Model IDs use provider/model format as OpenRouter expects
       name: 'OpenRouter',
       envPrefix: 'OPENROUTER',
-      defaultUrl: 'https://openrouter.ai/api/v1',
-      defaultModels: ['anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-exp']
+      defaultUrl: litellmUrl,
+      defaultModels: [
+        'anthropic/claude-sonnet-4-6',
+        'openai/gpt-4o',
+        'google/gemini-2.5-pro',
+        'meta-llama/llama-3.3-70b-instruct',
+      ]
     }
   ];
   
@@ -190,18 +267,20 @@ async function syncExternalProviders(pool) {
         [model, providerKey]
       );
       
+      const hasVision    = modelHasVision(providerKey, model);
+      const isReasoning  = modelIsReasoning(providerKey, model);
       if (existing.rows.length === 0) {
         await pool.query(`
-          INSERT INTO model_configs (name, description, provider, api_endpoint, model_identifier, requires_api_key, default_api_key, is_active)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [displayName, description, providerKey, apiUrl, model, true, apiKey, true]);
-        console.log(`[ModelSync] ✅ Added: ${provider.name} - ${model}`);
+          INSERT INTO model_configs (name, description, provider, api_endpoint, model_identifier, requires_api_key, default_api_key, is_active, has_vision, is_reasoning)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `, [displayName, description, providerKey, apiUrl, model, true, apiKey, true, hasVision, isReasoning]);
+        console.log(`[ModelSync] ✅ Added: ${provider.name} - ${model} (vision: ${hasVision}, reasoning: ${isReasoning})`);
       } else {
         await pool.query(`
           UPDATE model_configs 
-          SET api_endpoint = $1, default_api_key = $2, is_active = true, updated_at = NOW()
-          WHERE model_identifier = $3 AND provider = $4
-        `, [apiUrl, apiKey, model, providerKey]);
+          SET api_endpoint = $1, default_api_key = $2, is_active = true, has_vision = $3, is_reasoning = $4, updated_at = NOW()
+          WHERE model_identifier = $5 AND provider = $6
+        `, [apiUrl, apiKey, hasVision, isReasoning, model, providerKey]);
       }
     }
 

@@ -1,0 +1,164 @@
+# ============================================================
+# LiteLLM Proxy Configuration — EzCoworker Community Edition
+#
+# This proxy sits between Claude Code CLI and commercial model
+# providers. Claude Code speaks Anthropic /v1/messages format;
+# LiteLLM translates that to each provider's native format.
+#
+# How it works:
+#   Claude Code CLI  →  LiteLLM :4000  →  OpenAI / Gemini / Azure / etc.
+#
+# Model name format in litellm_params:
+#   openai/<model>          → OpenAI API
+#   gemini/<model>          → Google Gemini API
+#   azure/<deployment>      → Azure OpenAI
+#   anthropic/<model>       → Anthropic API (passthrough)
+#   groq/<model>            → Groq API
+#   openrouter/<model>      → OpenRouter
+#
+# The model_name is the alias EzCoworker passes via --model.
+# It must exactly match the model_identifier stored in the DB.
+# ============================================================
+
+model_list:
+
+  # ── OpenAI ──────────────────────────────────────────────
+  # Source: https://platform.openai.com/docs/models (March 2026)
+  # Non-reasoning models: drop reasoning.effort if Claude Code sends it
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4.1
+    litellm_params:
+      model: openai/gpt-4.1
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4.1-mini
+    litellm_params:
+      model: openai/gpt-4.1-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4.1-nano
+    litellm_params:
+      model: openai/gpt-4.1-nano
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Reasoning models: support reasoning_effort natively
+  - model_name: o3
+    litellm_params:
+      model: openai/o3
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: o4-mini
+    litellm_params:
+      model: openai/o4-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # ── Google Gemini ────────────────────────────────────────
+  # Source: https://ai.google.dev/gemini-api/docs/models (March 2026)
+  # Note: gemini-3-pro-preview shut down Mar 9 2026
+  #       gemini-2.0-flash retiring Jun 1 2026
+  #       gemini-1.5 models already retired
+  - model_name: gemini-2.5-pro
+    litellm_params:
+      model: gemini/gemini-2.5-pro
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-2.5-flash
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-2.5-flash-lite
+    litellm_params:
+      model: gemini/gemini-2.5-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-3.1-pro-preview
+    litellm_params:
+      model: gemini/gemini-3.1-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ── Azure OpenAI ─────────────────────────────────────────
+  # Uncomment and fill in your Azure deployment names.
+  # Each Azure deployment needs its own entry.
+  # - model_name: azure-gpt-4o
+  #   litellm_params:
+  #     model: azure/<your-deployment-name>
+  #     api_base: os.environ/AZURE_API_BASE
+  #     api_key: os.environ/AZURE_API_KEY
+  #     api_version: "2025-01-01-preview"
+
+  # ── Anthropic (passthrough) ──────────────────────────────
+  # Source: https://docs.anthropic.com/en/docs/about-claude/models/overview (March 2026)
+  # Note: Anthropic routes directly in containerManager (not via LiteLLM),
+  #       but these entries allow Anthropic models to be used via OpenRouter
+  #       or other gateway setups if needed.
+  - model_name: claude-opus-4-6
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet-4-6
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet-4-5-20250929
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ── Groq ─────────────────────────────────────────────────
+  # Source: https://console.groq.com/docs/models (March 2026)
+  - model_name: llama-3.3-70b-versatile
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+
+  - model_name: llama-3.1-8b-instant
+    litellm_params:
+      model: groq/llama-3.1-8b-instant
+      api_key: os.environ/GROQ_API_KEY
+
+  # ── OpenRouter ───────────────────────────────────────────
+  # OpenRouter gives access to hundreds of models via one key.
+  # - model_name: openrouter-claude-sonnet
+  #   litellm_params:
+  #     model: openrouter/anthropic/claude-sonnet-4-5
+  #     api_key: os.environ/OPENROUTER_API_KEY
+
+litellm_settings:
+  # Claude Code CLI handles its own agentic reasoning loop.
+  # We never forward thinking/reasoning params to any downstream model.
+  # drop_params: silently drops unsupported params instead of erroring
+  # modify_params: enables the param modification pipeline (required for adapter fixes)
+  drop_params: true
+  modify_params: true
+  # Explicitly drop all reasoning/thinking params on every outbound request.
+  # This covers the LiteLLM adapter bug where thinking→reasoning.effort
+  # gets forwarded to non-reasoning OpenAI models (e.g. gpt-4.1-mini).
+  additional_drop_params: ["reasoning_effort", "thinking", "reasoning", "reasoning.effort"]
+  request_timeout: 600
+
+general_settings:
+  # Master key — Claude Code agents authenticate with this.
+  # Must match LITELLM_MASTER_KEY in .env
+  master_key: os.environ/LITELLM_MASTER_KEY

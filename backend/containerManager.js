@@ -80,18 +80,31 @@ class ContainerManager {
     const apiKey = modelConfig?.api_key || 'dummy-key';
     const provider = (modelConfig?.provider || 'ollama').toLowerCase();
 
-    // Prefix model identifier correctly per provider so Claude Code CLI
-    // routes to the right API. Without the prefix, OpenAI and Google models fail.
-    //   openai   → openai/gpt-4o  (not just gpt-4o)
-    //   google   → gemini/gemini-2.0-flash  (not just gemini-2.0-flash)
-    //   groq     → groq/... not needed — Groq uses ANTHROPIC_BASE_URL passthrough
-    //   anthropic/ollama/openrouter → use model identifier as-is
-    let resolvedModel = model;
-    if (provider === 'openai' && !model.startsWith('openai/')) {
-      resolvedModel = `openai/${model}`;
-    } else if (provider === 'google' && !model.startsWith('gemini/') && !model.startsWith('google/')) {
-      resolvedModel = `gemini/${model}`;
-    }
+    // Resolve model identifier and endpoint for Claude Code CLI routing.
+    //
+    // Architecture:
+    //   Ollama / Anthropic  → route directly via ANTHROPIC_BASE_URL (native format)
+    //   Everything else     → route through LiteLLM proxy (http://litellm:4000)
+    //                         LiteLLM accepts Anthropic /v1/messages format and
+    //                         translates to OpenAI, Gemini, Azure, Groq, etc.
+    //
+    // Model name passed to --model must match the model_name alias in litellm_config.yaml.
+    // LiteLLM uses that alias to look up the real provider/model and API key.
+    const DIRECT_PROVIDERS = ['ollama', 'anthropic'];
+    const useLiteLLM = !DIRECT_PROVIDERS.includes(provider);
+
+    // For LiteLLM: override the endpoint and key so Claude Code routes to the proxy.
+    // The model name stays as-is (it's the alias defined in litellm_config.yaml).
+    // Agent containers are on the compose network so service names resolve.
+    // Point at litellm-proxy (4001) which strips reasoning params before
+    // forwarding to LiteLLM (4000) — avoids the LiteLLM adapter bug where
+    // thinking→reasoning.effort gets forwarded to non-reasoning models.
+    const litellmUrl  = process.env.LITELLM_URL || 'http://litellm-proxy:4001';
+    const litellmKey  = process.env.LITELLM_MASTER_KEY || 'sk-ezcoworker-community';
+
+    const resolvedEndpoint = useLiteLLM ? litellmUrl  : apiEndpoint;
+    const resolvedKey      = useLiteLLM ? litellmKey  : apiKey;
+    const resolvedModel    = model; // always bare alias — LiteLLM handles the mapping
 
 
     // Capable providers (cloud APIs) can use Claude Code's native tool
@@ -106,30 +119,14 @@ class ContainerManager {
     //
     // The Claude Code CLI routes differently per provider:
     //
-    //   google     → GOOGLE_API_KEY=AIza...  (Claude Code has native Gemini support)
-    //                Do NOT set ANTHROPIC_BASE_URL — Google's API is not Anthropic-compatible.
-    //
-    //   openai     → ANTHROPIC_BASE_URL=https://api.openai.com/v1   + ANTHROPIC_API_KEY=sk-...
-    //   anthropic  → ANTHROPIC_BASE_URL=https://api.anthropic.com   + ANTHROPIC_API_KEY=sk-ant-...
-    //   groq       → ANTHROPIC_BASE_URL=https://api.groq.com/...    + ANTHROPIC_API_KEY=gsk_...
-    //   openrouter → ANTHROPIC_BASE_URL=https://openrouter.ai/...   + ANTHROPIC_API_KEY=sk-or-...
-    //   ollama     → ANTHROPIC_BASE_URL=http://host.docker...        + ANTHROPIC_API_KEY=dummy
-    //
-    // NOTE: Setting OPENAI_API_KEY does nothing — the Claude CLI ignores it.
-    //       ANTHROPIC_BASE_URL must always point to the correct endpoint.
-    let providerEnvArgs;
-    if (provider === 'google') {
-      // Claude Code CLI natively supports Google Gemini via GOOGLE_API_KEY.
-      // Routing through ANTHROPIC_BASE_URL fails because Google's API is not Anthropic-format.
-      providerEnvArgs = [
-        `GOOGLE_API_KEY=${apiKey}`,
-      ];
-    } else {
-      providerEnvArgs = [
-        `ANTHROPIC_BASE_URL=${apiEndpoint}`,
-        `ANTHROPIC_API_KEY=${apiKey}`,
-      ];
-    }
+    // All providers route through ANTHROPIC_BASE_URL:
+    //   Ollama / Anthropic  → directly to the provider endpoint
+    //   OpenAI / Gemini / Azure / Groq / etc. → LiteLLM proxy at http://litellm:4000
+    //     LiteLLM accepts Anthropic /v1/messages and translates to each provider's format.
+    const providerEnvArgs = [
+      `ANTHROPIC_BASE_URL=${resolvedEndpoint}`,
+      `ANTHROPIC_API_KEY=${resolvedKey}`,
+    ];
 
     // Use 'env' command to set environment variables for this exec
     // Max agentic tool-call rounds — prevents unlimited retry chains (e.g. 20+ attempts to read a file).
@@ -146,7 +143,6 @@ class ContainerManager {
       containerName,
       'env',                           // Use env to set variables for this command
       ...providerEnvArgs,
-      'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1', // activates Task tool in all containers
       'claude',
       '-p',                            // Print mode: read from stdin, write response to stdout
       '--model', resolvedModel,
@@ -177,7 +173,7 @@ class ContainerManager {
 
     // Message is piped via stdin, NOT passed as a positional argument.
 
-    console.log(`[ContainerManager] Executing with model: ${model}, endpoint: ${apiEndpoint}`);
+    console.log(`[ContainerManager] Executing with model: ${model}, endpoint: ${resolvedEndpoint} (via ${useLiteLLM ? 'litellm' : provider})`);
     console.log(`[ContainerManager] Exec args count: ${args.length}, system-prompt length: ${(systemContext || '').length}, message: "${message.substring(0, 80)}"`);
 
     return new Promise((resolve, reject) => {
@@ -215,18 +211,31 @@ class ContainerManager {
     const apiKey = modelConfig?.api_key || 'dummy-key';
     const provider = (modelConfig?.provider || 'ollama').toLowerCase();
 
-    // Prefix model identifier correctly per provider so Claude Code CLI
-    // routes to the right API. Without the prefix, OpenAI and Google models fail.
-    //   openai   → openai/gpt-4o  (not just gpt-4o)
-    //   google   → gemini/gemini-2.0-flash  (not just gemini-2.0-flash)
-    //   groq     → groq/... not needed — Groq uses ANTHROPIC_BASE_URL passthrough
-    //   anthropic/ollama/openrouter → use model identifier as-is
-    let resolvedModel = model;
-    if (provider === 'openai' && !model.startsWith('openai/')) {
-      resolvedModel = `openai/${model}`;
-    } else if (provider === 'google' && !model.startsWith('gemini/') && !model.startsWith('google/')) {
-      resolvedModel = `gemini/${model}`;
-    }
+    // Resolve model identifier and endpoint for Claude Code CLI routing.
+    //
+    // Architecture:
+    //   Ollama / Anthropic  → route directly via ANTHROPIC_BASE_URL (native format)
+    //   Everything else     → route through LiteLLM proxy (http://litellm:4000)
+    //                         LiteLLM accepts Anthropic /v1/messages format and
+    //                         translates to OpenAI, Gemini, Azure, Groq, etc.
+    //
+    // Model name passed to --model must match the model_name alias in litellm_config.yaml.
+    // LiteLLM uses that alias to look up the real provider/model and API key.
+    const DIRECT_PROVIDERS = ['ollama', 'anthropic'];
+    const useLiteLLM = !DIRECT_PROVIDERS.includes(provider);
+
+    // For LiteLLM: override the endpoint and key so Claude Code routes to the proxy.
+    // The model name stays as-is (it's the alias defined in litellm_config.yaml).
+    // Agent containers are on the compose network so service names resolve.
+    // Point at litellm-proxy (4001) which strips reasoning params before
+    // forwarding to LiteLLM (4000) — avoids the LiteLLM adapter bug where
+    // thinking→reasoning.effort gets forwarded to non-reasoning models.
+    const litellmUrl  = process.env.LITELLM_URL || 'http://litellm-proxy:4001';
+    const litellmKey  = process.env.LITELLM_MASTER_KEY || 'sk-ezcoworker-community';
+
+    const resolvedEndpoint = useLiteLLM ? litellmUrl  : apiEndpoint;
+    const resolvedKey      = useLiteLLM ? litellmKey  : apiKey;
+    const resolvedModel    = model; // always bare alias — LiteLLM handles the mapping
 
 
     // Same capable-provider logic as execInContainer:
@@ -235,19 +244,13 @@ class ContainerManager {
     const isCapable = CAPABLE_PROVIDERS.includes(provider) || !!modelConfig?.is_capable;
 
     // Same provider-specific routing logic as execInContainer:
-    //   google → GOOGLE_API_KEY (native Gemini support, not Anthropic-compatible)
-    //   others → ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY
-    let providerEnvArgs;
-    if (provider === 'google') {
-      providerEnvArgs = [
-        `GOOGLE_API_KEY=${apiKey}`,
-      ];
-    } else {
-      providerEnvArgs = [
-        `ANTHROPIC_BASE_URL=${apiEndpoint}`,
-        `ANTHROPIC_API_KEY=${apiKey}`,
-      ];
-    }
+    // All providers route through ANTHROPIC_BASE_URL:
+    //   Ollama / Anthropic  → directly to the provider endpoint
+    //   OpenAI / Gemini / Azure / Groq / etc. → LiteLLM proxy at http://litellm:4000
+    const providerEnvArgs = [
+      `ANTHROPIC_BASE_URL=${resolvedEndpoint}`,
+      `ANTHROPIC_API_KEY=${resolvedKey}`,
+    ];
 
     // Same MAX_AGENT_TURNS / MAX_AGENT_TURNS_LOCAL cap as execInContainer.
     // Non-capable models (Ollama/local) are capped to prevent expensive
@@ -261,7 +264,6 @@ class ContainerManager {
       containerName,
       'env',
       ...providerEnvArgs,
-      'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1', // activates Task tool in all containers
       'claude',
       '-p',
       '--model', resolvedModel,
@@ -291,7 +293,7 @@ class ContainerManager {
       args.push('--mcp-config', modelConfig.mcpConfig);
     }
 
-    console.log(`[ContainerManager] Streaming exec — model: ${model}, provider: ${provider}, endpoint: ${apiEndpoint}, streamJson: ${!!options.streamJson}`);
+    console.log(`[ContainerManager] Streaming exec — model: ${model}, provider: ${provider}, endpoint: ${resolvedEndpoint} (via ${useLiteLLM ? 'litellm' : provider}), streamJson: ${!!options.streamJson}`);
 
     return new Promise((resolve, reject) => {
       const child = spawn('docker', args, {
@@ -468,15 +470,8 @@ class ContainerManager {
     const inputDir   = `${userDir}/input`;
     const outputDir  = `${userDir}/output`;
 
-    // Internal agent folders — NOT visible in UI, NOT scanned by snapshotConversationFiles.
-    // agent_input:  orchestrator writes shared context/reference files before spawning agents.
-    // agent_output: phase-1 parallel agents write structured JSON results here.
-    //               synthesis agent reads from here. Cleaned up after synthesis completes.
-    const agentInputDir  = `${userDir}/agent_input`;
-    const agentOutputDir = `${userDir}/agent_output`;
-
     let created = false;
-    for (const dir of [userDir, inputDir, outputDir, agentInputDir, agentOutputDir]) {
+    for (const dir of [userDir, inputDir, outputDir]) {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
         created = true;
@@ -491,26 +486,6 @@ class ContainerManager {
     }
   }
 
-  /**
-   * Clear agent_input and agent_output folders after a team run completes.
-   * Called by agentTeamManager after synthesis finishes.
-   * User-visible input/ and output/ are NOT touched.
-   */
-  cleanAgentFolders(userId) {
-    const userDir = `/srv/claude/users/${userId}`;
-    for (const folder of ['agent_input', 'agent_output']) {
-      const dir = `${userDir}/${folder}`;
-      if (!fs.existsSync(dir)) continue;
-      try {
-        for (const f of fs.readdirSync(dir)) {
-          try { fs.unlinkSync(`${dir}/${f}`); } catch {}
-        }
-        console.log(`[ContainerManager] Cleaned ${folder}/ for user ${userId}`);
-      } catch (e) {
-        console.warn(`[ContainerManager] Could not clean ${folder}/:`, e.message);
-      }
-    }
-  }
 
   /**
    * Write a file inside a container. Uses base64 to avoid escaping issues.
@@ -610,14 +585,18 @@ class ContainerManager {
     const hostUserPath = process.env.HOST_USER_DATA_PATH || 'C:/claude_data/users';
     const hostSkillsPath = process.env.HOST_SKILLS_PATH || 'C:/claude_data/skills';
 
-    // AGENT_IMAGE env var allows different editions to use different images:
-    //   Enterprise: claude-agent-image (default)
-    //   Community:  claude-agent-image-community
+    // AGENT_IMAGE env var — set to the community agent image name
     const agentImage = process.env.AGENT_IMAGE || 'claude-agent-image';
+
+    // Join the compose network so the agent can resolve 'litellm' by service name.
+    // The network name follows Docker Compose convention: <project>_default.
+    // COMPOSE_NETWORK can be overridden via .env if the project name differs.
+    const composeNetwork = process.env.COMPOSE_NETWORK || 'ezcoworker-community_default';
 
     const cmd = `docker create \
       --name ${containerName} \
       --entrypoint sleep \
+      --network ${composeNetwork} \
       --memory 512m --cpus 0.5 --pids-limit 100 \
       -v ${hostSkillsPath}:/home/node/app/.claude/skills:ro \
       -v ${hostUserPath}/${userId}:/home/node/app/workspace:rw \

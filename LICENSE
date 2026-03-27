@@ -1,21 +1,232 @@
-MIT License
+EZCOWORKER COMMUNITY EDITION
+Internal Business Use License (IBU-1.0)
 
-Copyright (c) 2026 EzinsightsInc
+Copyright (c) 2026 EzinsightsInc — ezinsights.ai
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+PREAMBLE
+
+This Internal Business Use License ("License") governs the use of EzCoworker
+Community Edition (the "Software"), developed and maintained by EzinsightsInc
+("Licensor"). The intent of this License is to make the Software freely
+available to organisations for internal business use, while preserving the
+Licensor's right to commercialise the Software as a service and protecting the
+integrity of the EzCoworker brand and distribution model.
+
+By obtaining, installing, copying, or using the Software, you ("Licensee")
+agree to be bound by the terms of this License.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. GRANT OF LICENSE
+
+Subject to the terms and conditions of this License, the Licensor hereby grants
+the Licensee a non-exclusive, non-transferable, royalty-free license to:
+
+  a) Obtain and install the Software on infrastructure owned or controlled by
+     the Licensee;
+
+  b) Use the Software to support the internal business operations of the
+     Licensee and its employees, contractors, and agents acting on the
+     Licensee's behalf;
+
+  c) Modify the Software for the Licensee's own internal use, provided that
+     such modifications are not redistributed except as permitted in Section 3;
+
+  d) Reproduce the Software solely for backup, archival, and disaster recovery
+     purposes within the Licensee's own infrastructure.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2. PERMITTED USES
+
+The following uses are expressly permitted under this License at no charge:
+
+  a) INTERNAL DEPLOYMENT — Installing and running the Software on the
+     Licensee's own servers, cloud instances, or private infrastructure for use
+     by the Licensee's own personnel.
+
+  b) INTERNAL MODIFICATIONS — Adapting, configuring, or extending the Software
+     to meet the Licensee's internal requirements, including the creation of
+     custom skills, plugins, and integrations.
+
+  c) EVALUATION AND TESTING — Using the Software in non-production environments
+     for evaluation, proof-of-concept, or testing purposes.
+
+  d) EDUCATIONAL AND RESEARCH USE — Using the Software within an academic
+     institution or research organisation for non-commercial research and
+     teaching purposes, provided no service fees are charged to end users.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3. RESTRICTED USES — WRITTEN APPROVAL REQUIRED
+
+The following uses are NOT permitted without prior written approval from the
+Licensor. To request approval, contact: hello@ezinsights.ai
+
+  a) COMMERCIAL HOSTING — Offering the Software, or any product substantially
+     derived from it, as a hosted service, managed service, or
+     Software-as-a-Service (SaaS) to third parties, whether for a fee or free
+     of charge.
+
+  b) REDISTRIBUTION — Distributing, sublicensing, selling, or otherwise making
+     the Software available to any third party, whether in source form, binary
+     form, modified form, or as part of a larger product or bundle.
+
+  c) OEM AND EMBEDDING — Embedding or bundling the Software within a commercial
+     product, appliance, or platform that is sold or licensed to third parties.
+
+  d) RESALE — Reselling, relicensing, or otherwise transferring rights to the
+     Software or any derivative thereof to any other person or organisation.
+
+  e) FRANCHISE OR AGENCY — Permitting third parties to deploy or operate the
+     Software on behalf of their own customers using the Licensee's deployment.
+
+  f) WHITE-LABELLING — Removing or replacing the EzCoworker branding, name, or
+     attribution notices for the purpose of redistributing the Software under a
+     different identity.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4. ATTRIBUTION AND NOTICES
+
+  a) All copies or substantial portions of the Software, whether in original
+     or modified form, must retain this License notice, the copyright notice,
+     and all attribution notices referencing EzinsightsInc and ezinsights.ai.
+
+  b) The Licensee must not remove, obscure, or alter any "Powered by EzCoworker"
+     notices, product branding, or links to ezinsights.ai that appear within
+     the Software's user interface, documentation, or output artefacts, except
+     as expressly permitted by a separate written agreement with the Licensor.
+
+  c) Any modified version of the Software used internally must be clearly marked
+     as modified by the Licensee, and must not be represented as the official
+     EzCoworker Community Edition.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5. ENTERPRISE EDITION
+
+The Software is the Community Edition of EzCoworker. A separate Enterprise
+Edition is available from the Licensor and includes additional capabilities
+including but not limited to: CEO Command Center, KPI Dashboards, IDE
+Integration, Knowledge Graph Server, Database Semantic Layer, Data Intelligence
+Agents, Code Migration Agents, Code Review Agents, Design Generation Agents,
+Code Generation Agents, Test Automation Agents, Channel Integrations, and
+advanced multi-agent orchestration.
+
+Use of the Enterprise Edition is governed by a separate commercial agreement.
+To enquire about Enterprise licensing, contact: hello@ezinsights.ai
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+6. CONTRIBUTIONS
+
+If the Licensee submits modifications, enhancements, or other contributions to
+the Software back to the Licensor (via pull request or otherwise), the Licensee
+grants the Licensor a perpetual, irrevocable, worldwide, royalty-free license
+to use, reproduce, modify, distribute, and sublicense such contributions as
+part of the Software under any license the Licensor chooses, including
+commercial licenses. The Licensee represents that they have the right to grant
+this license for all submitted contributions.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7. INTELLECTUAL PROPERTY
+
+The Software, including all source code, design, documentation, trademarks,
+and associated materials, is and remains the exclusive intellectual property of
+EzinsightsInc. This License does not transfer any ownership interest in the
+Software to the Licensee. The name "EzCoworker", the "ezinsights.ai" brand,
+and associated logos are trademarks of EzinsightsInc and may not be used by
+the Licensee to endorse or promote products or services derived from the
+Software without prior written consent.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+8. DISCLAIMER OF WARRANTIES
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. THE LICENSOR
+DOES NOT WARRANT THAT THE SOFTWARE WILL BE ERROR-FREE, SECURE, OR UNINTERRUPTED,
+OR THAT ANY DEFECTS WILL BE CORRECTED.
+
+THE LICENSEE ASSUMES ALL RISKS ASSOCIATED WITH THE INSTALLATION, USE, AND
+OPERATION OF THE SOFTWARE, INCLUDING BUT NOT LIMITED TO RISKS RELATING TO
+DATA LOSS, DATA SECURITY, AND SERVICE INTERRUPTION.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+9. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE
+LICENSOR, ITS DIRECTORS, EMPLOYEES, PARTNERS, OR CONTRIBUTORS BE LIABLE FOR
+ANY INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, CONSEQUENTIAL, OR PUNITIVE
+DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, LOSS OF DATA, BUSINESS
+INTERRUPTION, OR LOSS OF GOODWILL, HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE),
+ARISING OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THIS LICENSE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+THE LICENSOR'S TOTAL CUMULATIVE LIABILITY TO THE LICENSEE FOR ANY CLAIMS
+ARISING OUT OF OR RELATED TO THIS LICENSE OR THE SOFTWARE SHALL NOT EXCEED
+ONE HUNDRED US DOLLARS (USD $100).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+10. TERMINATION
+
+  a) This License is effective until terminated.
+
+  b) The Licensor may terminate this License immediately and without notice if
+     the Licensee breaches any term of this License, including any use
+     described in Section 3 without written approval.
+
+  c) Upon termination, the Licensee must immediately cease all use of the
+     Software, destroy all copies in their possession or control, and confirm
+     such destruction in writing to the Licensor upon request.
+
+  d) Sections 4, 6, 7, 8, 9, 10, and 11 shall survive termination of this
+     License.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+11. GENERAL
+
+  a) GOVERNING LAW — This License shall be governed by and construed in
+     accordance with the laws of the State of Delaware, United States, without
+     regard to its conflict of law provisions.
+
+  b) ENTIRE AGREEMENT — This License constitutes the entire agreement between
+     the Licensor and the Licensee with respect to the Software and supersedes
+     all prior agreements, representations, and understandings.
+
+  c) SEVERABILITY — If any provision of this License is found to be
+     unenforceable, the remaining provisions shall continue in full force and
+     effect, and the unenforceable provision shall be modified to the minimum
+     extent necessary to make it enforceable.
+
+  d) NO WAIVER — Failure by the Licensor to enforce any provision of this
+     License shall not constitute a waiver of the Licensor's right to enforce
+     that or any other provision in the future.
+
+  e) AMENDMENTS — The Licensor reserves the right to publish revised versions
+     of this License. Continued use of the Software after a revised License is
+     published constitutes acceptance of the revised terms. The Licensor will
+     provide reasonable notice of material changes via the project's GitHub
+     repository at github.com/ezinsights-ai/ezcoworker.
+
+  f) CONTACT — For licensing enquiries, commercial use approvals, or Enterprise
+     Edition information:
+
+       EzinsightsInc
+       ezinsights.ai
+       hello@ezinsights.ai
+       github.com/ezinsights-ai/ezcoworker
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+EzCoworker Community Edition — Internal Business Use License (IBU-1.0)
+Copyright (c) 2026 EzinsightsInc — ezinsights.ai

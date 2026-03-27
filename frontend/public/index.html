@@ -487,11 +487,6 @@
         .activity-step.type-tool_result.fail .activity-step-text { color: #fca5a5; }
         .activity-step.type-error .activity-step-text { color: #fca5a5; }
         /* Plan status steps — planner decisions, agent spawns, phase transitions */
-        .activity-step.type-plan_status .activity-step-text { color: #c4b5fd; font-size: 0.72rem; }
-        .activity-step.type-plan_status.agent-spawn .activity-step-text { color: #93c5fd; }
-        .activity-step.type-plan_status.agent-done .activity-step-text  { color: #6ee7b7; }
-        .activity-step.type-plan_status.synthesis .activity-step-text   { color: #fde68a; }
-        .activity-step.type-plan_status.warn .activity-step-text        { color: #fca5a5; }
         .activity-live-line {
             color: #4b7095;
             font-size: 0.7rem;
@@ -1259,8 +1254,9 @@
 
     const API_URL = (() => {
         const loc = window.location;
-        // Backend deployed at:
-        return 'http://localhost:5000/api';
+        // Call backend directly on port 5600 — bypasses nginx which intercepts
+        // URLs ending in .html/.js/.png etc before they reach the backend
+        return `${loc.protocol}//${loc.hostname}:5600/api`;
     })();
     let currentUser = JSON.parse(localStorage.getItem('claude_user'));
     let currentConversationId = null;
@@ -2243,25 +2239,6 @@
         }
 
         /**
-         * Add a plan status step — planner decisions, agent spawns, phase transitions.
-         * Subclass controls colour: agent-spawn | agent-done | synthesis | warn
-         */
-        function addPlanStep(icon, text, subclass) {
-            const steps = document.getElementById(`${activityId}-steps`);
-            if (!steps) return;
-            const liveLine = document.getElementById(`${activityId}-live`);
-            if (liveLine) liveLine.remove();
-            const step = document.createElement('div');
-            step.className = `activity-step type-plan_status${subclass ? ' ' + subclass : ''}`;
-            const displayText = text.length > 120 ? text.substring(0, 120) + '…' : text;
-            step.innerHTML = `<span class="activity-step-icon">${icon}</span><span class="activity-step-text">${escapeHtml(displayText)}</span>`;
-            steps.appendChild(step);
-            const body = document.getElementById(`${activityId}-body`);
-            if (body) body.scrollTop = body.scrollHeight;
-            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-        }
-
-        /**
          * Finalize the activity panel: mark done, update header, then collapse
          * and reveal the final message bubble.
          * @param {string} finalContent - The final reply text (or null for error)
@@ -2535,18 +2512,6 @@
                 thinking: (data) => {
                     resetStreamActivityTimer(); // Reset stall detector on every event
                     addStep('thinking', data.icon || '•', data.text || '');
-                },
-                // Plan status — planner decisions, agent spawns, phase transitions
-                plan_status: (data) => {
-                    resetStreamActivityTimer();
-                    const text = data.text || '';
-                    // Classify for colour coding
-                    let subclass = '';
-                    if (text.startsWith('  Agent') || text.includes('Spawning agent')) subclass = 'agent-spawn';
-                    else if (text.includes('complete:') || text.includes('validated'))  subclass = 'agent-done';
-                    else if (text.includes('synthesis') || text.includes('Synthesis') || text.includes('🔀')) subclass = 'synthesis';
-                    else if (text.includes('failed') || text.includes('unavailable') || text.includes('⚠️')) subclass = 'warn';
-                    addPlanStep(data.icon || '•', text, subclass);
                 },
                 // Live streaming text from the agent (both capable and Ollama models)
                 agent_text: (data) => {
@@ -3236,19 +3201,21 @@
             const outputFiles = data.files.filter(f => f.folder === 'output');
 
             let html = '';
+            const fmtPanelSize = sz => sz < 1024 ? sz + ' B' : sz < 1048576 ? (sz/1024).toFixed(1) + ' KB' : (sz/1048576).toFixed(1) + ' MB';
+            const fmtPanelTime = ts => { if (!ts) return ''; const d = new Date(ts); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); };
             const renderGroup = (label, files) => {
                 if (files.length === 0) return '';
+                // Sort descending by modified date (newest first)
+                const sorted = [...files].sort((a, b) => new Date(b.modified) - new Date(a.modified));
                 let h = `<div class="text-xs text-gray-600 font-medium mt-1 mb-0.5 px-2">${label}</div>`;
-                for (const f of files) {
-                    const sizeStr = f.size < 1024 ? f.size + ' B'
-                        : f.size < 1048576 ? (f.size / 1024).toFixed(1) + ' KB'
-                        : (f.size / 1048576).toFixed(1) + ' MB';
+                for (const f of sorted) {
                     h += `<div class="file-panel-item">
                         <svg class="w-3 h-3 flex-shrink-0 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                         </svg>
                         <span class="flex-1 truncate">${escapeHtml(f.name)}</span>
-                        <span class="text-gray-600 flex-shrink-0" style="font-size:0.65rem">${sizeStr}</span>
+                        <span class="text-gray-600 flex-shrink-0" style="font-size:0.6rem;white-space:nowrap;">${fmtPanelTime(f.modified)}</span>
+                        <span class="text-gray-600 flex-shrink-0" style="font-size:0.65rem">${fmtPanelSize(f.size)}</span>
                         <div class="file-panel-actions">
                             <a href="${API_URL}/files/download/${f.folder}/${encodeURIComponent(f.name)}"
                                class="text-gray-600 hover:text-blue-400 transition p-0.5" title="Download">
@@ -3297,17 +3264,21 @@
         if (!link) return;
         e.preventDefault();
         try {
-            const res = await apiFetch(link.href, { headers: { 'Authorization': `Bearer ${currentUser.token}` } });
+            // getAttribute gives the raw href value as written in the HTML (/api/files/download/...)
+            // which is already relative — avoids new URL() throwing on relative paths
+            const href = link.getAttribute('href');
+            const filename = decodeURIComponent(href.split('/').pop());
+            const res = await fetch(href, { headers: { 'Authorization': `Bearer ${currentUser.token}` } });
             if (!res.ok) { alert('Download failed: ' + (await res.text() || res.statusText)); return; }
             const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
+            const blobUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
-            a.download = decodeURIComponent(link.href.split('/').pop());
+            a.href = blobUrl;
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             a.remove();
-            URL.revokeObjectURL(url);
+            URL.revokeObjectURL(blobUrl);
         } catch (err) { console.error('Download error:', err); alert('Download failed. Please try again.'); }
     });
 
@@ -3839,15 +3810,17 @@
             if (chev) chev.style.transform = 'rotate(90deg)';
         }
 
+        // Sort both groups descending by attached_at (newest first)
+        const sortDesc = arr => [...arr].sort((a, b) => new Date(b.attached_at || 0) - new Date(a.attached_at || 0));
         let html = '';
         if (inputs.length) {
             html += `<div style="font-size:0.6rem;font-weight:600;color:#4b5563;text-transform:uppercase;letter-spacing:.05em;padding:4px 6px 2px;">Uploaded (${inputs.length})</div>`;
-            html += inputs.map(f => fileRowHtml(f)).join('');
+            html += sortDesc(inputs).map(f => fileRowHtml(f)).join('');
         }
         if (outputs.length) {
             if (inputs.length) html += `<div style="height:1px;background:rgba(255,255,255,0.06);margin:3px 0;"></div>`;
             html += `<div style="font-size:0.6rem;font-weight:600;color:#4b5563;text-transform:uppercase;letter-spacing:.05em;padding:4px 6px 2px;">Generated (${outputs.length})</div>`;
-            html += outputs.map(f => fileRowHtml(f)).join('');
+            html += sortDesc(outputs).map(f => fileRowHtml(f)).join('');
         }
         list.innerHTML = html;
     }

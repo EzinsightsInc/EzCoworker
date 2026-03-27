@@ -287,7 +287,10 @@ h1,h2,h3,.font-display{font-family:'Outfit',sans-serif}
 </div>
 
 <script>
-const API = 'http://localhost:5000/api';
+const API = (() => {
+    const loc = window.location;
+    return `${loc.protocol}//${loc.hostname}:5600/api`;
+})();
 let adminToken = localStorage.getItem('ez_admin_token');
 let adminEmail = localStorage.getItem('ez_admin_email');
 let currentView = 'overview';
@@ -381,7 +384,6 @@ function adminLogout() {
 function init() {
   if (adminToken) {
     document.getElementById('auth-screen').style.display = 'none';
-    applyAdminTier();
     document.getElementById('app').style.display = 'flex';
     document.getElementById('admin-email-display').textContent = adminEmail || '';
     switchView('overview', document.querySelector('.nav-item[data-view="overview"]'));
@@ -393,7 +395,7 @@ function switchView(view, el) {
   currentView = view;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = { overview:'Dashboard', activity:'Activity & Trends', users:'Users', conversations:'Conversations', models:'Models & Token Usage', performance:'Response Performance', storage:'Storage', skills:'Skills Usage', agentteams:'Agent Team Usage', infrastructure:'Docker & Concurrency', errorrates:'Error Rates' };
+  const titles = { overview:'Dashboard', activity:'Activity & Trends', users:'Users', conversations:'Conversations', models:'Models & Token Usage', performance:'Response Performance', storage:'Storage', skills:'Skills Usage', infrastructure:'Docker & Concurrency', errorrates:'Error Rates' };
   document.getElementById('view-title').textContent = titles[view] || view;
   loadView(view);
 }
@@ -415,7 +417,6 @@ async function loadView(view) {
     else if (view === 'performance') await renderPerformance();
     else if (view === 'storage') await renderStorage();
     else if (view === 'skills') await renderSkills();
-    else if (view === 'agentteams') await renderAgentTeams();
     else if (view === 'infrastructure') await renderInfrastructure();
     else if (view === 'errorrates') await renderErrorRates();
     document.getElementById('last-refresh').textContent = 'Refreshed '+new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
@@ -456,6 +457,7 @@ async function renderOverview() {
         ${kpiTile('Files Tracked', fmtNum(kpis.total_files), fmtBytes(+kpis.total_input_bytes + +kpis.total_output_bytes)+' total', '#22c55e')}
         ${kpiTile('Shared Chats', fmtNum(kpis.total_shares), 'Public share links', '#f97316')}
         ${kpiTile('Active (7d)', fmtNum(kpis.active_users_7d), 'of '+fmtNum(kpis.total_users)+' users', '#ef4444')}
+        ${kpiTile('Failed Responses', fmtNum(kpis.failed_responses||0), 'errors + timeouts', +kpis.failed_responses>0?'#ef4444':'#4ade80')}
       </div>
 
       <div class="grid-2" style="margin-bottom:16px">
@@ -489,15 +491,16 @@ async function renderOverview() {
     </div>
   `);
 
-  const labels = activity.map(r => {
+  const actData = Array.isArray(activity) ? activity : [];
+  const labels = actData.map(r => {
     const d = new Date(r.date); return (d.getMonth()+1)+'/'+d.getDate();
   });
   makeChart('chart-overview-msgs', baseLineConfig(labels, [{
-    label: 'Messages', data: activity.map(r=>+r.messages),
+    label: 'Messages', data: actData.map(r=>+r.messages),
     borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', tension: 0.4, fill: true, pointRadius: 3
   }]));
   makeChart('chart-overview-tokens', baseLineConfig(labels, [{
-    label: 'Tokens', data: activity.map(r=>+r.tokens),
+    label: 'Tokens', data: actData.map(r=>+r.tokens),
     borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', tension: 0.4, fill: true, pointRadius: 3
   }]));
 }
@@ -521,9 +524,77 @@ function healthBar(label, value, total, color, fmt=fmtNum) {
   </div>`;
 }
 
+
+// ─── SORTABLE / SEARCHABLE TABLE UTILITY ─────────────────
+const _tbl = {}; // state per table id
+
+function initTable(id, cols, data) {
+  _tbl[id] = { cols, data, sort: cols[0].key, dir: 'desc', q: '' };
+  _drawTable(id);
+}
+
+function _tblSort(id, key) {
+  const s = _tbl[id];
+  s.dir = (s.sort === key && s.dir === 'desc') ? 'asc' : 'desc';
+  s.sort = key;
+  _drawTable(id);
+}
+
+function _tblSearch(id, val) {
+  _tbl[id].q = val;
+  _drawTable(id);
+}
+
+function _drawTable(id) {
+  const s = _tbl[id];
+  if (!s) return;
+  const q = s.q.trim().toLowerCase();
+
+  // Filter
+  const rows = q ? s.data.filter(r =>
+    s.cols.some(c => String(c.val ? c.val(r) : (r[c.key] ?? '')).toLowerCase().includes(q))
+  ) : s.data;
+
+  // Sort
+  const col = s.cols.find(c => c.key === s.sort);
+  const sorted = [...rows].sort((a, b) => {
+    const av = col?.val ? col.val(a) : (a[s.sort] ?? 0);
+    const bv = col?.val ? col.val(b) : (b[s.sort] ?? 0);
+    const cmp = typeof av === 'string' ? av.localeCompare(bv) : (+av) - (+bv);
+    return s.dir === 'asc' ? cmp : -cmp;
+  });
+
+  // Render thead
+  const thHtml = s.cols.map(c => {
+    const active = s.sort === c.key;
+    const arrow = active ? (s.dir === 'asc' ? ' ↑' : ' ↓') : '';
+    return `<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="_tblSort('${id}','${c.key}')">${c.label}${arrow}</th>`;
+  }).join('');
+
+  // Render tbody
+  const tbHtml = sorted.map(r => '<tr>' + s.cols.map(c =>
+    `<td>${c.render ? c.render(r) : escHtml(String(r[c.key] ?? ''))}</td>`
+  ).join('') + '</tr>').join('') || `<tr><td colspan="${s.cols.length}" style="text-align:center;color:var(--muted);padding:20px">No results</td></tr>`;
+
+  const tbl = document.getElementById(id);
+  if (!tbl) return;
+  tbl.querySelector('thead tr').innerHTML = thHtml;
+  tbl.querySelector('tbody').innerHTML = tbHtml;
+}
+
 // ─── ACTIVITY ─────────────────────────────────────────────
 async function renderActivity() {
-  const rows = await apiFetch('/admin/activity/daily?days='+activityDays).then(r=>r.json());
+  // Always fetch the full history — backend clips to first DB date via GREATEST.
+  // Range buttons only zoom the charts; the table always shows all available days.
+  const _raw = await apiFetch('/admin/activity/daily?days=365').then(r=>r.json());
+  if (!Array.isArray(_raw)) {
+    showError('Activity data error: ' + (_raw?.error || JSON.stringify(_raw)));
+    return;
+  }
+  const rows = _raw;
+  // chartRows respects the range button (7d/14d/30d etc.) for chart zoom
+  // table always shows all available data (full rows, newest first)
+  const chartRows = rows.slice(-activityDays);
   showContent(`
     <div class="fade-up">
       <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-bottom:14px">
@@ -544,35 +615,48 @@ async function renderActivity() {
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Data Table</span></div>
-        <div class="card-body" style="padding:0;overflow-x:auto">
-          <table class="data-table">
-            <thead><tr><th>Date</th><th>Messages</th><th>Tokens</th><th>Avg Resp</th><th>New Users</th><th>New Convs</th></tr></thead>
-            <tbody>${rows.slice().reverse().map(r=>`<tr>
-              <td style="color:var(--muted)">${fmtDate(r.date)}</td>
-              <td style="font-weight:600">${fmtNum(r.messages)}</td>
-              <td>${fmtNum(r.tokens)}</td>
-              <td>${r.avg_response_secs>0?fmtSecs(r.avg_response_secs):'—'}</td>
-              <td style="color:#4ade80">${r.new_users>0?'+'+r.new_users:'0'}</td>
-              <td>${fmtNum(r.new_conversations)}</td>
-            </tr>`).join('')}</tbody>
-          </table>
+        <div class="card-header">
+          <span class="card-title">Data Table</span>
+          <input id="act-search" type="text" placeholder="Search…" oninput="_tblSearch('act-tbl',this.value)"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 10px;font-size:0.75rem;outline:none;width:180px">
+        </div>
+        <div style="padding:0;overflow-x:auto">
+          <table id="act-tbl" class="data-table"><thead><tr></tr></thead><tbody></tbody></table>
         </div>
       </div>
     </div>
   `);
 
-  const labels = rows.map(r => { const d=new Date(r.date); return (d.getMonth()+1)+'/'+d.getDate(); });
+  const labels = chartRows.map(r => { const d=new Date(r.date); return (d.getMonth()+1)+'/'+d.getDate(); });
   makeChart('chart-act-msgs', baseLineConfig(labels, [
-    { label:'Messages', data:rows.map(r=>+r.messages), borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.1)', tension:0.4, fill:true, yAxisID:'y', pointRadius:2 },
-    { label:'New Users', data:rows.map(r=>+r.new_users), borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,0.1)', tension:0.4, fill:false, yAxisID:'y1', pointRadius:3, borderDash:[4,3] }
+    { label:'Messages', data:chartRows.map(r=>+r.messages), borderColor:'#6366f1', backgroundColor:'rgba(99,102,241,0.1)', tension:0.4, fill:true, yAxisID:'y', pointRadius:2 },
+    { label:'New Users', data:chartRows.map(r=>+r.new_users), borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,0.1)', tension:0.4, fill:false, yAxisID:'y1', pointRadius:3, borderDash:[4,3] }
   ], true));
   makeChart('chart-act-tokens', baseLineConfig(labels, [
-    { label:'Tokens', data:rows.map(r=>+r.tokens), borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,0.08)', tension:0.4, fill:true, pointRadius:2 }
+    { label:'Tokens', data:chartRows.map(r=>+r.tokens), borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,0.08)', tension:0.4, fill:true, pointRadius:2 }
   ]));
   makeChart('chart-act-secs', baseLineConfig(labels, [
-    { label:'Avg (s)', data:rows.map(r=>r.avg_response_secs>0?(+r.avg_response_secs).toFixed(2):null), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.08)', tension:0.4, fill:true, pointRadius:2, spanGaps:true }
+    { label:'Avg (s)', data:chartRows.map(r=>r.avg_response_secs>0?(+r.avg_response_secs).toFixed(2):null), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.08)', tension:0.4, fill:true, pointRadius:2, spanGaps:true }
   ]));
+
+  // Initialise sortable table — newest first by default
+  const actRows = rows.slice().reverse(); // newest first
+  initTable('act-tbl', [
+    { key:'date',            label:'Date',      val:r=>r.date,
+      render:r=>`<span style="color:var(--muted)">${fmtDate(r.date)}</span>` },
+    { key:'messages',        label:'Messages',  val:r=>+r.messages,
+      render:r=>`<span style="font-weight:600">${fmtNum(r.messages)}</span>` },
+    { key:'failed_responses',label:'Errors',    val:r=>+r.failed_responses,
+      render:r=>`<span style="color:${+r.failed_responses>0?'#f87171':'var(--muted)'}">${fmtNum(r.failed_responses||0)}</span>` },
+    { key:'tokens',          label:'Tokens',    val:r=>+r.tokens,
+      render:r=>fmtNum(r.tokens) },
+    { key:'avg_response_secs',label:'Avg Resp', val:r=>+r.avg_response_secs,
+      render:r=>r.avg_response_secs>0?fmtSecs(r.avg_response_secs):'—' },
+    { key:'new_users',       label:'New Users', val:r=>+r.new_users,
+      render:r=>`<span style="color:#4ade80">${r.new_users>0?'+'+r.new_users:'0'}</span>` },
+    { key:'new_conversations',label:'New Convs',val:r=>+r.new_conversations,
+      render:r=>fmtNum(r.new_conversations) },
+  ], actRows);
 }
 
 function setActivityDays(d) { activityDays = d; renderActivity(); }
@@ -617,37 +701,42 @@ async function renderUsers() {
         </div>
       </div>
       <div class="card">
+        <div class="card-header">
+          <span class="card-title">${fmtNum(data.total)} users</span>
+          <input id="usr-search" type="text" placeholder="Search users…" oninput="_tblSearch('usr-tbl',this.value)"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 10px;font-size:0.75rem;outline:none;width:200px">
+        </div>
         <div style="overflow-x:auto">
-          <table class="data-table">
-            <thead><tr>
-              <th>User</th><th>Joined</th><th>Convs</th><th>Messages</th><th>Tokens</th>
-              <th>Avg Resp</th><th>Model</th><th>Files</th><th>Storage</th><th>Last Active</th>
-            </tr></thead>
-            <tbody>
-            ${users.map(u=>`<tr onclick="openUserDrill(${u.id},'${escHtml(u.email)}')">
-              <td>
-                <div style="font-weight:600;font-size:0.8rem;color:var(--text)">${escHtml(u.email)}</div>
-                ${u.auto_select?'<span class="badge badge-purple" style="font-size:0.58rem;margin-top:2px">Auto</span>':''}
-              </td>
-              <td style="color:var(--muted)">${fmtDate(u.created_at)}</td>
-              <td style="font-weight:600">${fmtNum(u.total_conversations)}</td>
-              <td>${fmtNum(u.total_messages)}</td>
-              <td>${fmtNum(u.total_tokens)}</td>
-              <td style="color:${+u.avg_response_secs>30?'#f87171':+u.avg_response_secs>15?'#fbbf24':'#4ade80'}">${u.avg_response_secs>0?fmtSecs(u.avg_response_secs):'—'}</td>
-              <td>
-                ${u.current_model?`<div style="font-size:0.72rem;color:var(--text)">${escHtml(u.current_model)}</div>
-                  <span class="badge badge-${provColor(u.current_provider)}" style="font-size:0.58rem">${escHtml(u.current_provider||'')}</span>`:'<span style="color:var(--muted)">—</span>'}
-              </td>
-              <td>${fmtNum(u.total_files)}</td>
-              <td style="font-size:0.75rem">${fmtBytes(+u.input_bytes + +u.output_bytes)}</td>
-              <td style="color:var(--muted);font-size:0.75rem">${relTime(u.last_active)}</td>
-            </tr>`).join('')}
-            </tbody>
-          </table>
+          <table id="usr-tbl" class="data-table"><thead><tr></tr></thead><tbody></tbody></table>
         </div>
       </div>
     </div>
   `);
+
+  initTable('usr-tbl', [
+    { key:'email',               label:'User',        val:r=>r.email,
+      render:r=>`<div style="cursor:pointer" onclick="openUserDrill(${r.id},'${escHtml(r.email)}')"><div style="font-weight:600;font-size:0.8rem;color:var(--text)">${escHtml(r.email)}</div>${r.auto_select?'<span class="badge badge-purple" style="font-size:0.58rem">Auto</span>':''}</div>` },
+    { key:'created_at',          label:'Joined',      val:r=>r.created_at||'',
+      render:r=>`<span style="color:var(--muted)">${fmtDate(r.created_at)}</span>` },
+    { key:'total_conversations', label:'Convs',       val:r=>+r.total_conversations,
+      render:r=>`<span style="font-weight:600">${fmtNum(r.total_conversations)}</span>` },
+    { key:'total_messages',      label:'Messages',    val:r=>+r.total_messages,
+      render:r=>fmtNum(r.total_messages) },
+    { key:'failed_responses',    label:'Errors',      val:r=>+r.failed_responses,
+      render:r=>`<span style="color:${+r.failed_responses>0?'#f87171':'var(--muted)'}">${fmtNum(r.failed_responses||0)}</span>` },
+    { key:'total_tokens',        label:'Tokens',      val:r=>+r.total_tokens,
+      render:r=>fmtNum(r.total_tokens) },
+    { key:'avg_response_secs',   label:'Avg Resp',    val:r=>+r.avg_response_secs,
+      render:r=>`<span style="color:${+r.avg_response_secs>30?'#f87171':+r.avg_response_secs>15?'#fbbf24':'#4ade80'}">${r.avg_response_secs>0?fmtSecs(r.avg_response_secs):'—'}</span>` },
+    { key:'current_model',       label:'Model',       val:r=>r.current_model||'',
+      render:r=>r.current_model?`<div style="font-size:0.72rem;color:var(--text)">${escHtml(r.current_model)}</div><span class="badge badge-${provColor(r.current_provider)}" style="font-size:0.58rem">${escHtml(r.current_provider||'')}</span>`:'<span style="color:var(--muted)">—</span>' },
+    { key:'total_files',         label:'Files',       val:r=>+r.total_files,
+      render:r=>fmtNum(r.total_files) },
+    { key:'_storage',            label:'Storage',     val:r=>(+r.input_bytes)+(+r.output_bytes),
+      render:r=>`<span style="font-size:0.75rem">${fmtBytes(+r.input_bytes + +r.output_bytes)}</span>` },
+    { key:'last_active',         label:'Last Active', val:r=>r.last_active||'',
+      render:r=>`<span style="color:var(--muted);font-size:0.75rem">${relTime(r.last_active)}</span>` },
+  ], users);
 }
 
 function setUserSort(s) { userSort = s; renderUsers(); }
@@ -672,6 +761,7 @@ function renderUserDrill(d) {
       ${miniKpi('Conversations', conversations.length, '#6366f1')}
       ${miniKpi('Total Tokens', fmtNum(totalTokens), '#a855f7')}
       ${miniKpi('Files', files.reduce((s,f)=>s+(+f.file_count),0), '#22c55e')}
+      ${miniKpi('Failed Responses', fmtNum(modelUsage.reduce((s,m)=>s+(+m.failed||0),0)), +modelUsage.reduce((s,m)=>s+(+m.failed||0),0)>0?'#ef4444':'#4ade80')}
     </div>
 
     <!-- Model usage -->
@@ -684,6 +774,7 @@ function renderUserDrill(d) {
         </div>
         <div style="text-align:right">
           <div style="font-size:0.75rem;font-weight:600">${fmtNum(m.cnt)} msgs</div>
+          ${+m.failed>0?`<div style="font-size:0.68rem;color:#f87171">${fmtNum(m.failed)} failed</div>`:''}
           <div style="font-size:0.68rem;color:var(--muted)">${fmtNum(m.tokens)} tokens</div>
         </div>
       </div>`).join('') : '<p style="color:var(--muted);font-size:0.78rem">No model data yet</p>'}
@@ -738,31 +829,41 @@ async function renderConversations() {
       <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
         ${kpiTile('Total Conversations', fmtNum(overview.total_conversations), '', '#6366f1')}
         ${kpiTile('Total Messages', fmtNum(overview.total_messages), fmtNum(overview.user_messages)+' user / '+fmtNum(overview.assistant_messages)+' agent', '#2dd4bf')}
+        ${kpiTile('Failed Responses', fmtNum(overview.failed_responses||0), 'errors + timeouts', +overview.failed_responses>0?'#ef4444':'#4ade80')}
         ${kpiTile('Shared Conversations', fmtNum(overview.total_shares), 'public share links active', '#f97316')}
         ${kpiTile('Avg Response', fmtSecs(overview.avg_response_seconds), 'per agent message', '#a855f7')}
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Recent Activity Feed</span><span style="font-size:0.7rem;color:var(--muted)">Latest 50 messages</span></div>
+        <div class="card-header">
+          <span class="card-title">Recent Activity Feed</span>
+          <input type="text" placeholder="Search…" oninput="_tblSearch('conv-tbl',this.value)"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 10px;font-size:0.75rem;outline:none;width:180px">
+        </div>
         <div style="overflow-x:auto">
-          <table class="data-table">
-            <thead><tr><th>User</th><th>Conversation</th><th>Role</th><th>Time</th><th>Length</th><th>Tokens</th><th>Resp Time</th><th>Model</th></tr></thead>
-            <tbody>${recent.map(r=>`<tr>
-              <td style="font-size:0.72rem;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.email)}</td>
-              <td style="font-size:0.72rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.conversation_title||'Untitled')}</td>
-              <td><span class="badge ${r.role==='user'?'badge-blue':'badge-teal'}">${r.role}</span></td>
-              <td style="font-size:0.7rem;color:var(--muted);white-space:nowrap">${relTime(r.created_at)}</td>
-              <td style="font-size:0.72rem">${fmtNum(r.content_length)} chars</td>
-              <td style="font-size:0.72rem">${r.tokens?fmtNum(r.tokens):'—'}</td>
-              <td style="font-size:0.72rem;color:${r.elapsed_secs>30?'#f87171':r.elapsed_secs>15?'#fbbf24':'#4ade80'}">${r.elapsed_secs?fmtSecs(r.elapsed_secs):'—'}</td>
-              <td style="font-size:0.7rem">
-                ${r.model?`<span class="prov-${(r.provider||'').toLowerCase()}">${escHtml(r.model.split(':')[0])}</span>`:'<span style="color:var(--muted)">—</span>'}
-              </td>
-            </tr>`).join('')}</tbody>
-          </table>
+          <table id="conv-tbl" class="data-table"><thead><tr></tr></thead><tbody></tbody></table>
         </div>
       </div>
     </div>
   `);
+
+  initTable('conv-tbl', [
+    { key:'email',              label:'User',      val:r=>r.email||'',
+      render:r=>`<span style="font-size:0.72rem;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${escHtml(r.email||'')}</span>` },
+    { key:'conversation_title', label:'Conversation', val:r=>r.conversation_title||'',
+      render:r=>`<span style="font-size:0.72rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${escHtml(r.conversation_title||'Untitled')}</span>` },
+    { key:'role',               label:'Role',      val:r=>r.role||'',
+      render:r=>`<span class="badge ${r.role==='user'?'badge-blue':'badge-teal'}">${r.role}</span>` },
+    { key:'created_at',         label:'Time',      val:r=>r.created_at||'',
+      render:r=>`<span style="font-size:0.7rem;color:var(--muted);white-space:nowrap">${relTime(r.created_at)}</span>` },
+    { key:'content_length',     label:'Length',    val:r=>+r.content_length,
+      render:r=>`<span style="font-size:0.72rem">${fmtNum(r.content_length)} chars</span>` },
+    { key:'tokens',             label:'Tokens',    val:r=>+r.tokens||0,
+      render:r=>`<span style="font-size:0.72rem">${r.tokens?fmtNum(r.tokens):'—'}</span>` },
+    { key:'elapsed_secs',       label:'Resp Time', val:r=>+r.elapsed_secs||0,
+      render:r=>`<span style="font-size:0.72rem;color:${+r.elapsed_secs>30?'#f87171':+r.elapsed_secs>15?'#fbbf24':'#4ade80'}">${r.elapsed_secs?fmtSecs(r.elapsed_secs):'—'}</span>` },
+    { key:'model',              label:'Model',     val:r=>r.model||'',
+      render:r=>r.model?`<span style="font-size:0.7rem">${escHtml(r.model.split(':')[0])}</span>`:'<span style="color:var(--muted)">—</span>' },
+  ], recent);
 }
 
 // ─── MODELS ───────────────────────────────────────────────
@@ -786,26 +887,13 @@ async function renderModels() {
 
       <div class="grid-2" style="margin-bottom:16px">
         <div class="card">
-          <div class="card-header"><span class="card-title">Usage Statistics</span></div>
+          <div class="card-header">
+            <span class="card-title">Usage Statistics</span>
+            <input type="text" placeholder="Search models…" oninput="_tblSearch('mdl-tbl',this.value)"
+              style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 10px;font-size:0.75rem;outline:none;width:180px">
+          </div>
           <div style="overflow-x:auto">
-            <table class="data-table">
-              <thead><tr><th>Model</th><th>Provider</th><th>Messages</th><th>Total Tokens</th><th>In / Out</th><th>Avg Resp</th><th>Users</th></tr></thead>
-              <tbody>${usage.map(m=>`<tr onclick="showModelDrill('${escHtml(m.model_identifier)}','${escHtml(m.provider)}')">
-                <td style="font-weight:600;font-size:0.78rem">${escHtml(m.model_identifier)}</td>
-                <td><span class="badge badge-${provColor(m.provider)}">${escHtml(m.provider)}</span></td>
-                <td>${fmtNum(m.message_count)}</td>
-                <td>
-                  <div>${fmtNum(m.total_tokens)}</div>
-                  <div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;width:80px">
-                    <div style="height:100%;background:#6366f1;border-radius:2px;width:${totalTokens>0?Math.round((+m.total_tokens/totalTokens)*100):0}%"></div>
-                  </div>
-                </td>
-                <td style="font-size:0.72rem;color:var(--muted)">${fmtNum(m.input_tokens)} / ${fmtNum(m.output_tokens)}</td>
-                <td style="color:${+m.avg_response_secs>30?'#f87171':+m.avg_response_secs>15?'#fbbf24':'#4ade80'}">${fmtSecs(m.avg_response_secs)}</td>
-                <td>${fmtNum(m.unique_users)}</td>
-              </tr>`).join('')}
-              </tbody>
-            </table>
+            <table id="mdl-tbl" class="data-table"><thead><tr></tr></thead><tbody></tbody></table>
           </div>
         </div>
         <div class="card">
@@ -848,6 +936,25 @@ async function renderModels() {
   const palette = ['#6366f1','#3b82f6','#2dd4bf','#22c55e','#f59e0b','#f97316','#ef4444','#a855f7','#ec4899','#06b6d4'];
   doughnutBase('chart-model-tokens', usage.map(m=>m.model_identifier), usage.map(m=>+m.total_tokens), palette);
   doughnutBase('chart-model-msgs',   usage.map(m=>m.model_identifier), usage.map(m=>+m.message_count), palette);
+
+  initTable('mdl-tbl', [
+    { key:'model_identifier', label:'Model',    val:m=>m.model_identifier,
+      render:m=>`<span style="font-weight:600;font-size:0.78rem;cursor:pointer" onclick="showModelDrill('${escHtml(m.model_identifier)}','${escHtml(m.provider)}')">${escHtml(m.model_identifier)}</span>` },
+    { key:'provider',         label:'Provider', val:m=>m.provider,
+      render:m=>`<span class="badge badge-${provColor(m.provider)}">${escHtml(m.provider)}</span>` },
+    { key:'message_count',    label:'Messages', val:m=>+m.message_count,
+      render:m=>fmtNum(m.message_count) },
+    { key:'failed_responses', label:'Errors',   val:m=>+m.failed_responses,
+      render:m=>`<span style="color:${+m.failed_responses>0?'#f87171':'var(--muted)'}">${fmtNum(m.failed_responses||0)}</span>` },
+    { key:'total_tokens',     label:'Tokens',   val:m=>+m.total_tokens,
+      render:m=>`<div>${fmtNum(m.total_tokens)}</div><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;width:80px"><div style="height:100%;background:#6366f1;border-radius:2px;width:${totalTokens>0?Math.round((+m.total_tokens/totalTokens)*100):0}%"></div></div>` },
+    { key:'input_tokens',     label:'In / Out', val:m=>+m.input_tokens,
+      render:m=>`<span style="font-size:0.72rem;color:var(--muted)">${fmtNum(m.input_tokens)} / ${fmtNum(m.output_tokens)}</span>` },
+    { key:'avg_response_secs',label:'Avg Resp', val:m=>+m.avg_response_secs,
+      render:m=>`<span style="color:${+m.avg_response_secs>30?'#f87171':+m.avg_response_secs>15?'#fbbf24':'#4ade80'}">${fmtSecs(m.avg_response_secs)}</span>` },
+    { key:'unique_users',     label:'Users',    val:m=>+m.unique_users,
+      render:m=>fmtNum(m.unique_users) },
+  ], usage);
 }
 
 // ─── PERFORMANCE ──────────────────────────────────────────
@@ -948,25 +1055,13 @@ async function renderStorage() {
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Storage by User</span></div>
+        <div class="card-header">
+          <span class="card-title">Storage by User</span>
+          <input type="text" placeholder="Search users…" oninput="_tblSearch('stor-tbl',this.value)"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 10px;font-size:0.75rem;outline:none;width:180px">
+        </div>
         <div style="overflow-x:auto">
-          <table class="data-table">
-            <thead><tr><th>User</th><th>Total</th><th>Input</th><th>Input Files</th><th>Output</th><th>Output Files</th><th>Last Activity</th></tr></thead>
-            <tbody>${users.map(u=>`<tr onclick="openUserDrill(${u.id},'${escHtml(u.email)}')">
-              <td style="font-size:0.78rem;font-weight:600">${escHtml(u.email)}</td>
-              <td style="font-weight:700">
-                ${fmtBytes(u.total_bytes)}
-                <div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;width:80px">
-                  <div style="height:100%;background:#3b82f6;border-radius:2px;width:${grand>0?Math.round((+u.total_bytes/grand)*100):0}%"></div>
-                </div>
-              </td>
-              <td style="color:#4ade80">${fmtBytes(u.input_bytes)}</td>
-              <td style="color:var(--muted)">${fmtNum(u.input_files)}</td>
-              <td style="color:#c084fc">${fmtBytes(u.output_bytes)}</td>
-              <td style="color:var(--muted)">${fmtNum(u.output_files)}</td>
-              <td style="color:var(--muted);font-size:0.72rem">${relTime(u.last_activity)}</td>
-            </tr>`).join('')}</tbody>
-          </table>
+          <table id="stor-tbl" class="data-table"><thead><tr></tr></thead><tbody></tbody></table>
         </div>
       </div>
     </div>
@@ -994,6 +1089,23 @@ async function renderStorage() {
       options:{ responsive:true, maintainAspectRatio:false, cutout:'65%', plugins:{ legend:{position:'bottom',labels:{color:'#6b7a99',font:{size:11},padding:16}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#6b7a99',callbacks:{label:ctx=>`${ctx.label}: ${fmtBytes(ctx.raw)}`}} } }
     });
   }
+
+  initTable('stor-tbl', [
+    { key:'email',         label:'User',          val:u=>u.email||'',
+      render:u=>`<span style="font-size:0.78rem;font-weight:600;cursor:pointer" onclick="openUserDrill(${u.id},'${escHtml(u.email)}')">${escHtml(u.email)}</span>` },
+    { key:'total_bytes',   label:'Total',         val:u=>+u.total_bytes,
+      render:u=>`<span style="font-weight:700">${fmtBytes(u.total_bytes)}</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:3px;width:80px"><div style="height:100%;background:#3b82f6;border-radius:2px;width:${grand>0?Math.round((+u.total_bytes/grand)*100):0}%"></div></div>` },
+    { key:'input_bytes',   label:'Input',         val:u=>+u.input_bytes,
+      render:u=>`<span style="color:#4ade80">${fmtBytes(u.input_bytes)}</span>` },
+    { key:'input_files',   label:'Input Files',   val:u=>+u.input_files,
+      render:u=>`<span style="color:var(--muted)">${fmtNum(u.input_files)}</span>` },
+    { key:'output_bytes',  label:'Output',        val:u=>+u.output_bytes,
+      render:u=>`<span style="color:#c084fc">${fmtBytes(u.output_bytes)}</span>` },
+    { key:'output_files',  label:'Output Files',  val:u=>+u.output_files,
+      render:u=>`<span style="color:var(--muted)">${fmtNum(u.output_files)}</span>` },
+    { key:'last_activity', label:'Last Activity', val:u=>u.last_activity||'',
+      render:u=>`<span style="color:var(--muted);font-size:0.72rem">${relTime(u.last_activity)}</span>` },
+  ], users);
 }
 
 // ─── SKILLS ───────────────────────────────────────────────
@@ -1012,26 +1124,13 @@ async function renderSkills() {
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">All Skills</span></div>
+        <div class="card-header">
+          <span class="card-title">All Skills</span>
+          <input type="text" placeholder="Search skills…" oninput="_tblSearch('skill-tbl',this.value)"
+            style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 10px;font-size:0.75rem;outline:none;width:180px">
+        </div>
         <div style="overflow-x:auto">
-          <table class="data-table">
-            <thead><tr><th>Skill</th><th>Enabled By</th><th>Disabled By</th><th>Adoption Rate</th><th>Trend</th></tr></thead>
-            <tbody>${rows.map(s=>{
-              const rate = s.total_users>0?Math.round((s.enabled_by/s.total_users)*100):0;
-              return `<tr>
-                <td style="font-weight:600;font-size:0.82rem">${escHtml(s.skill_name)}</td>
-                <td style="color:#4ade80;font-weight:700">${fmtNum(s.enabled_by)}</td>
-                <td style="color:#f87171">${fmtNum(s.disabled_by)}</td>
-                <td>
-                  <div style="display:flex;align-items:center;gap:8px">
-                    <div class="progress-track" style="width:80px"><div class="progress-fill" style="width:${rate}%;background:${rate>70?'#22c55e':rate>40?'#3b82f6':'#6b7a99'}"></div></div>
-                    <span style="font-size:0.72rem;color:var(--muted)">${rate}%</span>
-                  </div>
-                </td>
-                <td>${rate>70?'🔥 Popular':rate>40?'📈 Growing':rate>20?'📊 Moderate':'💤 Low'}</td>
-              </tr>`;
-            }).join('')}</tbody>
-          </table>
+          <table id="skill-tbl" class="data-table"><thead><tr></tr></thead><tbody></tbody></table>
         </div>
       </div>
     </div>
@@ -1061,6 +1160,22 @@ async function renderSkills() {
       options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{position:'bottom',labels:{color:'#6b7a99',font:{size:12},padding:16}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#6b7a99'} } }
     });
   }
+
+  const skillsWithRate = rows.map(s => ({
+    ...s, rate: s.total_users>0 ? Math.round((s.enabled_by/s.total_users)*100) : 0
+  }));
+  initTable('skill-tbl', [
+    { key:'skill_name',  label:'Skill',         val:s=>s.skill_name,
+      render:s=>`<span style="font-weight:600;font-size:0.82rem">${escHtml(s.skill_name)}</span>` },
+    { key:'enabled_by',  label:'Enabled By',    val:s=>+s.enabled_by,
+      render:s=>`<span style="color:#4ade80;font-weight:700">${fmtNum(s.enabled_by)}</span>` },
+    { key:'disabled_by', label:'Disabled By',   val:s=>+s.disabled_by,
+      render:s=>`<span style="color:#f87171">${fmtNum(s.disabled_by)}</span>` },
+    { key:'rate',        label:'Adoption Rate', val:s=>+s.rate,
+      render:s=>`<div style="display:flex;align-items:center;gap:8px"><div class="progress-track" style="width:80px"><div class="progress-fill" style="width:${s.rate}%;background:${s.rate>70?'#22c55e':s.rate>40?'#3b82f6':'#6b7a99'}"></div></div><span style="font-size:0.72rem;color:var(--muted)">${s.rate}%</span></div>` },
+    { key:'trend',       label:'Trend',         val:s=>+s.rate,
+      render:s=>s.rate>70?'🔥 Popular':s.rate>40?'📈 Growing':s.rate>20?'📊 Moderate':'💤 Low' },
+  ], skillsWithRate);
 }
 
 // ─── DRILL PANEL ──────────────────────────────────────────
@@ -1074,123 +1189,6 @@ function closeDrill() {
 }
 
 
-// ─── AGENT TEAMS ──────────────────────────────────────────
-async function renderAgentTeams() {
-  const [data, days] = [await apiFetch('/admin/agent-teams?days=30').then(r=>r.json()), 30];
-  const s = data.split || {};
-  const total = +s.total_requests || 1;
-  const teamPct = total ? ((+s.team_requests/total)*100).toFixed(1) : '0.0';
-  const fallbackPct = total ? ((+s.fallback_requests/total)*100).toFixed(1) : '0.0';
-
-  showContent(`
-    <div class="fade-up">
-      <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
-        ${kpiTile('Team Requests', fmtNum(s.team_requests||0), teamPct+'% of all requests', '#6366f1')}
-        ${kpiTile('Single Agent', fmtNum(s.single_requests||0), (100-+teamPct).toFixed(1)+'% of all requests', '#22c55e')}
-        ${kpiTile('Team Fallbacks', fmtNum(s.fallback_requests||0), fallbackPct+'% fallback rate', +fallbackPct>5?'#ef4444':'#f59e0b')}
-        ${kpiTile('Avg Agents/Team', (+s.avg_agents_when_team||0).toFixed(1), 'per team request', '#a855f7')}
-        ${kpiTile('Team vs Single Speed', fmtSecs(s.avg_team_elapsed||0)+' / '+fmtSecs(s.avg_single_elapsed||0), 'team / single avg', '#2dd4bf')}
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-        <div class="card">
-          <div class="card-header"><span class="card-title">Team vs Single (30d)</span></div>
-          <div class="card-body"><div class="chart-wrap" style="height:200px"><canvas id="chart-team-split"></canvas></div></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Agent Count Distribution</span></div>
-          <div class="card-body"><div class="chart-wrap" style="height:200px"><canvas id="chart-agent-dist"></canvas></div></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Top Team Triggers</span></div>
-          <div class="card-body" style="padding:8px">
-            ${(data.reasons||[]).map(r=>`
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border)">
-                <span style="font-size:0.75rem;color:var(--text)">${escHtml(r.reason.replace(/_/g,' '))}</span>
-                <span class="badge badge-purple">${fmtNum(r.count)}</span>
-              </div>`).join('')}
-          </div>
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-        <div class="card">
-          <div class="card-header"><span class="card-title">Team Usage Trend (30d)</span></div>
-          <div class="card-body"><div class="chart-wrap" style="height:200px"><canvas id="chart-team-trend"></canvas></div></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Capability Combos Triggering Teams</span></div>
-          <div style="overflow-x:auto">
-            <table class="data-table">
-              <thead><tr><th>Trigger</th><th>Intent</th><th>Count</th><th>Avg Time</th></tr></thead>
-              <tbody>${(data.capabilityCombos||[]).map(c=>`<tr>
-                <td style="font-size:0.75rem;font-weight:600">${escHtml(c.trigger?.replace(/_/g,' ')||'—')}</td>
-                <td style="color:var(--muted);font-size:0.73rem">${escHtml(c.intent||'—')}</td>
-                <td><span class="badge badge-blue">${fmtNum(c.count)}</span></td>
-                <td style="color:${+c.avg_secs>30?'#fbbf24':'#4ade80'}">${fmtSecs(c.avg_secs)}</td>
-              </tr>`).join('')}</tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      ${(data.fallbacks||[]).length ? `
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Team→Single Fallbacks (recent)</span>
-          <span class="badge badge-red">${data.fallbacks.length} events</span>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="data-table">
-            <thead><tr><th>Time</th><th>Provider</th><th>Reason</th><th>Error</th><th>Elapsed</th></tr></thead>
-            <tbody>${data.fallbacks.map(f=>`<tr>
-              <td style="color:var(--muted);font-size:0.72rem">${new Date(f.created_at).toLocaleString()}</td>
-              <td><span class="badge badge-${provColor(f.provider||'')}">${escHtml(f.provider||'—')}</span></td>
-              <td style="font-size:0.73rem">${escHtml(f.reason?.replace(/_/g,' ')||'—')}</td>
-              <td style="font-size:0.7rem;color:#f87171;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml((f.error_snippet||'').substring(0,80))}</td>
-              <td style="color:${+f.elapsed_seconds>60?'#ef4444':'#fbbf24'}">${fmtSecs(f.elapsed_seconds)}</td>
-            </tr>`).join('')}</tbody>
-          </table>
-        </div>
-      </div>` : '<div class="card"><div class="card-body" style="text-align:center;color:var(--muted);padding:30px">No team fallbacks recorded ✓</div></div>'}
-    </div>
-  `);
-
-  destroyChart('chart-team-split');
-  const splitCtx = document.getElementById('chart-team-split')?.getContext('2d');
-  if (splitCtx) {
-    chartInstances['chart-team-split'] = new Chart(splitCtx, {
-      type:'doughnut',
-      data:{ labels:['Team','Single','Fallback'], datasets:[{ data:[+s.team_requests||0,+s.single_requests||0,+s.fallback_requests||0], backgroundColor:['#6366f1','#22c55e','#ef4444'], borderWidth:0, hoverOffset:6 }] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{labels:{color:'#9ca3af',font:{size:11}}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#9ca3af'} }, cutout:'65%' }
-    });
-  }
-  destroyChart('chart-agent-dist');
-  const distCtx = document.getElementById('chart-agent-dist')?.getContext('2d');
-  if (distCtx && data.agentDist?.length) {
-    chartInstances['chart-agent-dist'] = new Chart(distCtx, {
-      type:'bar',
-      data:{ labels: data.agentDist.map(d=>d.agent_count+' agents'), datasets:[{ label:'Times used', data:data.agentDist.map(d=>+d.occurrences), backgroundColor:['#6366f1','#a855f7','#3b82f6','#2dd4bf'], borderRadius:6 }] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#9ca3af'} }, scales:{ x:{ticks:{color:'#6b7a99',font:{size:11}},grid:{display:false}}, y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true} } }
-    });
-  }
-  destroyChart('chart-team-trend');
-  const trendCtx = document.getElementById('chart-team-trend')?.getContext('2d');
-  if (trendCtx && data.daily?.length) {
-    chartInstances['chart-team-trend'] = new Chart(trendCtx, {
-      type:'bar',
-      data:{
-        labels: data.daily.map(d=>d.date),
-        datasets:[
-          { label:'Team', data:data.daily.map(d=>+d.team_count), backgroundColor:'rgba(99,102,241,0.8)', borderRadius:3, stack:'s' },
-          { label:'Single', data:data.daily.map(d=>+d.single_count), backgroundColor:'rgba(34,197,94,0.5)', borderRadius:3, stack:'s' },
-          { label:'Fallback', data:data.daily.map(d=>+d.fallback_count), backgroundColor:'rgba(239,68,68,0.8)', borderRadius:3, stack:'s' },
-        ]
-      },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{labels:{color:'#9ca3af',font:{size:10}}}, tooltip:{backgroundColor:'#0b1427',titleColor:'#e8eeff',bodyColor:'#9ca3af',mode:'index'} }, scales:{ x:{ticks:{color:'#6b7a99',font:{size:10}},grid:{display:false}}, y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'},beginAtZero:true,stacked:true} } }
-    });
-  }
-}
 
 // ─── INFRASTRUCTURE ───────────────────────────────────────
 async function renderInfrastructure() {
@@ -1276,7 +1274,6 @@ async function renderInfrastructure() {
         ${kpiTile('All Containers', (docker.containers||[]).length, sys.running+' running', '#3b82f6')}
         ${kpiTile('User Agents',    agentContainers.length, 'active sessions', '#6366f1')}
         ${kpiTile('Live Streams',   be.active_streams||0, 'SSE connections', +be.active_streams>8?'#ef4444':+be.active_streams>3?'#f59e0b':'#22c55e')}
-        ${kpiTile('Active Teams',   be.active_teams||0, 'multi-agent now', '#a855f7')}
         ${kpiTile('Req/min',        tp.rpm_1h||'—', '1h rolling avg', '#2dd4bf')}
         ${kpiTile('P95 Response',   perf.p95?fmtSecs(perf.p95):'—', 'last hour', +perf.p95>60?'#ef4444':+perf.p95>20?'#f59e0b':'#22c55e')}
         ${kpiTile('Backend RSS',    be.rss_mb?be.rss_mb+'MB':'—', 'heap: '+be.heap_used_mb+'MB', +be.rss_mb>400?'#f59e0b':'#22c55e')}
