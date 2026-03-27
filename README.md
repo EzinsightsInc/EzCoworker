@@ -70,7 +70,7 @@ EzCoworker is a complete, production-ready AI agent platform that runs entirely 
 ★  Multi-Agent Orchestration — parallel agents coordinated by a planner
 ```
 
-> Contact **[hello@ezinsights.ai](mailto:hello@ezinsights.ai)** for Enterprise pricing and onboarding.
+> Contact **[sales@ezinsights.ai](mailto:sales@ezinsights.ai)** for Enterprise pricing and onboarding.
 
 ---
 
@@ -112,7 +112,7 @@ Released under the **Internal Business Use License (IBU-1.0)**.
 - ❌ No resale, SaaS hosting, or redistribution without approval
 - ❌ No white-labelling or OEM embedding without approval
 
-See [LICENSE](./LICENSE) for full terms. Commercial use enquiries: [hello@ezinsights.ai](mailto:hello@ezinsights.ai)
+See [LICENSE](./LICENSE) for full terms. Commercial use enquiries: [sales@ezinsights.ai](mailto:sales@ezinsights.ai)
 
 ---
 
@@ -124,6 +124,6 @@ See [LICENSE](./LICENSE) for full terms. Commercial use enquiries: [hello@ezinsi
 
 ---
 
-Built with ❤️ by the [ezinsights.ai](https://ezinsights.ai) team &nbsp;·&nbsp; [hello@ezinsights.ai](mailto:hello@ezinsights.ai)
+Built with ❤️ by the [ezinsights.ai](https://ezinsights.ai) team &nbsp;·&nbsp; [sales@ezinsights.ai](mailto:sales@ezinsights.ai)
 
 </div>
