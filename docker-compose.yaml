@@ -85,6 +85,10 @@ services:
       - ./frontend/public/image.png:/usr/share/nginx/html/image.png
     depends_on:
       - backend
+      
+networks:
+  default:
+    name: ezcoworker-community_default
 
 volumes:
   postgres_data_community:
