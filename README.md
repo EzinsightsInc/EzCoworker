@@ -84,12 +84,33 @@ cd EzCoworker
 # Build the agent container (~5 min first time)
 docker build -f agent.Dockerfile -t claude-agent-image-community .
 
+# Download the skills from the skills folder and extract them in the relevant skill directory
+# If Windows HOST_SKILLS_PATH=C:/claude_data_community/skills
+# If MacOS HOST_SKILLS_PATH=/opt/claude_data_community/skills
+
 # Configure API keys
 cp .env.example .env   # add ANTHROPIC_API_KEY, OPENAI_API_KEY etc.
 
 # Launch everything
 docker-compose up -d --build
 ```
+
+```bash
+# Create Admin account
+
+curl -X POST http://localhost:5600/api/admin/setup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "setupKey": "your_ADMIN_SETUP_KEY_from_env",
+    "username": "admin",
+    "password": "your_admin_password",
+    "email": "admin@yourdomain.com"
+  }'
+
+# Using Powershell
+Invoke-RestMethod -Method POST -Uri "http://localhost:5600/api/admin/setup" `
+  -ContentType "application/json" `
+  -Body '{"setupKey":"your_ADMIN_SETUP_KEY_from_env","username":"admin","password":"your_admin_password","email":"admin@yourdomain.com"}'
 
 ```
 ✓  frontend   →  http://localhost:3600

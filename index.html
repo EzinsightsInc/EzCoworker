@@ -76,6 +76,56 @@
       background-size: 52px 52px;
     }
 
+    .video-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  width: 80%;
+  max-width: 900px;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.3s;
+}
+.video-modal.active {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+}
+.video-modal video {
+  width: 100%;
+}
+.video-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.6);
+  z-index: 9998;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.3s;
+}
+.video-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.close-btn {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 26px;
+  color: #fff;
+  cursor: pointer;
+  z-index: 10000; /* 🔥 important */
+}
+
+
     .vthumb {
   position: relative;
 }
@@ -125,7 +175,7 @@
     .nav-left {
       display: flex;
       align-items: center;
-      gap: 16px
+      gap: 5px
     }
 
     .nav-wordmark {
@@ -171,7 +221,7 @@
       font-family: 'Arimo', sans-serif;
       font-size: 0.65rem;
       font-weight: 600;
-      padding: 7px 16px;
+      padding: 7px 5px;
       border-radius: 20px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
@@ -1249,15 +1299,70 @@
         style="color:#383838;background:rgba(255,185,64,0.08);border-color:rgba(255,185,64,0.25)">IBU License</span>
     </div>
     <div class="nav-links">
+      <a href="#demos">Demos</a>
       <a href="#features">Features</a>
       <a href="#architecture">Architecture</a>
       <a href="#quickstart">Quickstart</a>
-      <a href="#demos">Demos</a>
       <a href="#compare">Compare</a>
       <a href="#editions">Editions</a>
       <a href="https://github.com/EzinsightsInc/EzCoworker" target="_blank">GitHub</a>
     </div>
-    <a href="https://github.com/EzinsightsInc/EzCoworker" class="nav-cta" target="_blank">⭐ Star on GitHub</a>
+    <!-- GitHub Star Button -->
+<span style="display:inline-flex;align-items:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  
+  <!-- Star Button (Left) -->
+  <a href="https://github.com/EzinsightsInc/EzCoworker"
+     target="_blank"
+     style="display:inline-flex;align-items:center;gap:5px;
+            padding:4px 10px;
+            background:#f6f8fa;
+            border:1px solid #d0d7de;
+            border-radius:6px 0 0 6px;
+            color:#24292f;
+            font-size:12px;
+            font-weight:500;
+            line-height:20px;
+            text-decoration:none;
+            white-space:nowrap;">
+    <!-- GitHub Octocat Icon -->
+    <svg height="16" width="16" viewBox="0 0 16 16" fill="#24292f">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+    </svg>
+    Star
+  </a>
+
+  <!-- Count Badge (Right) -->
+  <a href="https://github.com/EzinsightsInc/EzCoworker/stargazers"
+     target="_blank"
+     id="gh-star-count"
+     style="display:inline-flex;align-items:center;
+            padding:4px 10px;
+            background:#f6f8fa;
+            border:1px solid #d0d7de;
+            border-left:none;
+            border-radius:0 6px 6px 0;
+            color:#24292f;
+            font-size:12px;
+            font-weight:500;
+            line-height:20px;
+            text-decoration:none;">
+    0
+  </a>
+
+</span>
+
+<!-- Fetch live star count from GitHub API -->
+<script>
+fetch('https://api.github.com/repos/EzinsightsInc/EzCoworker')
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    var el = document.getElementById('gh-star-count');
+    if(el && d.stargazers_count !== undefined){
+      el.textContent = d.stargazers_count.toLocaleString();
+    }
+  })
+  .catch(function(){});
+</script>
   </nav>
 
   <!-- ──────── HERO ──────── -->
@@ -1276,6 +1381,7 @@
     </h1>
 
     <p class="hero-tagline fu d2" style="color: #3498db;">Your AI Agents. Your Infrastructure. Your Rules.</p>
+    
 
     <p class="hero-desc fu d3">
       A powerful self-hosted AI agent platform powered by <b>Claude Code CLI</b> — free for internal business use.
@@ -1320,6 +1426,13 @@
 <span class="tc"># Build the agent container image (~5 min)</span>
 <span class="tk">$</span> docker build <span class="tf">-f</span> agent.Dockerfile <span class="tf">-t</span> <span class="ts">claude-agent-image-community</span> .
 
+<span class="tc"># Download the skills from the skills folder and extract them in the relevant skill directory</span>
+<span class="ts"># Based on the OS </span>
+<span class="tx">\</span> If Windows: HOST_SKILLS_PATH=C:/claude_data_community/skills
+<span class="tx">\</span> If MacOS: HOST_SKILLS_PATH=/opt/claude_data_community/skills
+<span class="tx">\</span> Do the same for plugins
+<span class="tx">\</span> Do the same for mcp-servers set up
+
 <span class="tc"># Configure API keys, then launch</span>
 <span class="tk">$</span> cp .env.example .env  <span class="tc">&amp;&amp; vi .env</span>
 <span class="tk">$</span> docker-compose up <span class="tf">-d</span> <span class="tf">--build</span>
@@ -1342,6 +1455,175 @@
     <div class="stat"><span class="sn">Docker</span><span class="sl">Isolated Agents</span></div>
     <div class="stat"><span class="sn">IBU</span><span class="sl">Licensed</span></div>
   </div>
+
+  <!-- ──────── DEMOS ──────── -->
+ <section class="sec" id="demos">
+  <div class="sec-label">See It In Action</div>
+  <h2>Demo Videos &amp; Walkthroughs</h2>
+  <p class="sec-sub">
+    Watch EzCoworker handle real-world tasks — from data analysis to document generation to live code execution.
+  </p>
+
+  <div class="vid-grid">
+
+    <!-- CARD 1 -->
+    <div class="vcard">
+      <div class="vthumb">
+        <video controls controlsList="nodownload nofullscreen" poster="thumbs/quickstart.jpg" style="width:100%; height:100%; object-fit:cover;">
+          <source src="https://ezinsights.ai/ezinsights_videos/EzCoworker_Walkthrough.mp4" type="video/mp4">
+        </video>
+
+        <div class="vplay">
+          <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="vinfo">
+        <span class="vtag">Getting Started</span>
+        <h3>5-Minute Quick Start</h3>
+        <p>Install EzCoworker, connect Ollama, and run your first agent end-to-end.</p>
+        <span class="vdur">⏱ ~5 min</span>
+      </div>
+    </div>
+
+    <!-- CARD 2 -->
+    <div class="vcard">
+      <div class="vthumb">
+        <video controls controlsList="nodownload nofullscreen" style="width:100%; height:100%; object-fit:cover;">
+          <source src="https://ezinsights.ai/ezinsights_videos/Ez-Coworker-Report-Generation.mp4" type="video/mp4">
+        </video>
+
+        <div class="vplay">
+          <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="vinfo">
+        <span class="vtag">Use Case</span>
+        <h3>CSV Analysis → PDF Report</h3>
+        <p>Upload a CSV, ask for analysis, watch the agent generate charts and a formatted PDF output.</p>
+        <span class="vdur">⏱ ~2 min</span>
+      </div>
+    </div>
+
+    <!-- CARD 3 -->
+    <div class="vcard">
+      <div class="vthumb">
+        <video controls controlsList="nodownload nofullscreen" style="width:100%; height:100%; object-fit:cover;">
+          <source src="https://ezinsights.ai/ezinsights_videos/EzCoworker-Connecting-MCP-Servers.mp4" type="video/mp4">
+        </video>
+
+        <div class="vplay">
+          <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="vinfo">
+        <span class="vtag">MCP Integration</span>
+        <h3>Connecting MCP Servers</h3>
+        <p>Add a custom MCP server as an agent tool and watch it get called live during a session.</p>
+        <span class="vdur">⏱ ~2 min</span>
+      </div>
+    </div>
+
+    <!-- CARD 4 -->
+    <div class="vcard">
+      <div class="vthumb">
+        <video controls controlsList="nodownload nofullscreen" style="width:100%; height:100%; object-fit:cover;">
+          <source src="https://ezinsights.ai/ezinsights_videos/EzCoworker_Building-Custom-Skills.mp4" type="video/mp4">
+        </video>
+
+        <div class="vplay">
+          <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="vinfo">
+        <span class="vtag">Skills System</span>
+        <h3>Building Custom Skills</h3>
+        <p>Create a SKILL.md, assign it to a user, and see how it shapes agent behavior in real-time.</p>
+        <span class="vdur">⏱ ~2 min</span>
+      </div>
+    </div>
+
+    <!-- CARD 5 -->
+    <div class="vcard">
+      <div class="vthumb">
+        <video controls controlsList="nodownload nofullscreen" style="width:100%; height:100%; object-fit:cover;">
+          <source src="https://ezinsights.ai/ezinsights_videos/EzCoworker-Admin.mp4" type="video/mp4">
+        </video>
+
+        <div class="vplay">
+          <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="vinfo">
+        <span class="vtag">Administration</span>
+        <h3>Admin Panel Walkthrough</h3>
+        <p>Manage users, configure models, assign skills, and monitor storage from the admin UI.</p>
+        <span class="vdur">⏱ ~6 min</span>
+      </div>
+    </div>
+
+    <!-- CARD 6 -->
+    <div class="vcard">
+      <div class="vthumb">
+        <video controls controlsList="nodownload nofullscreen" style="width:100%; height:100%; object-fit:cover;">
+          <source src="#" type="video/mp4">
+        </video>
+
+        <div class="vplay">
+          <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="vinfo">
+        <span class="vtag">Configuration</span>
+        <h3>Multi-Provider Model Setup</h3>
+        <p>Configure Ollama local models side by side with Anthropic and OpenAI cloud models.</p>
+        <span class="vdur">⏱ ~0 min</span>
+      </div>
+    </div>
+
+  </div>
+</section>
 
   <!-- ──────── FEATURES ──────── -->
   <section class="sec" id="features">
@@ -1861,200 +2143,7 @@
   </div>
 
 
-  <!-- ──────── DEMOS ──────── -->
-  <section class="sec" id="demos">
-    <div class="sec-label">See It In Action</div>
-    <h2>Demo Videos &amp; Walkthroughs</h2>
-    <p class="sec-sub">Watch EzCoworker handle real-world tasks — from data analysis to document generation to live code
-      execution.</p>
-
-    <div class="vid-grid">
-
-      <!-- CARD 1 — replace placeholder with your media -->
-      <div class="vcard">
-  <div class="vthumb">
-    
-    <video controls controlsList="nodownload" poster="thumbs/quickstart.jpg" style="width:100%; height:100%; object-fit:cover;">
-      <source src="https://ezinsights.ai/ezinsights_videos/EzCoworker-Quick-Start.mp4" type="video/mp4">
-      Your browser does not support the video tag.
-    </video>
-
-    <div class="vplay">
-  <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
-    <polygon points="5,3 19,12 5,21" />
-  </svg>
-
-  <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
-    <rect x="6" y="4" width="4" height="16"/>
-    <rect x="14" y="4" width="4" height="16"/>
-  </svg>
-</div>
-
-  </div>
-
-  <div class="vinfo">
-    <span class="vtag">Getting Started</span>
-    <h3>5-Minute Quick Start</h3>
-    <p>Install EzCoworker, connect Ollama, and run your first agent end-to-end.</p>
-    <span class="vdur">⏱ ~4 min</span>
-  </div>
-</div>
-
-      <!-- CARD 2 -->
-      <div class="vcard">
-  <div class="vthumb">
-    
-    <video controls controlsList="nodownload" style="width:100%; height:100%; object-fit:cover;">
-      <source src="https://ezinsights.ai/ezinsights_videos/Ez-Coworker-Report-Generation.mp4" type="video/mp4">
-      Your browser does not support the video tag.
-    </video>
-
-     <div class="vplay">
-  <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
-    <polygon points="5,3 19,12 5,21" />
-  </svg>
-
-  <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
-    <rect x="6" y="4" width="4" height="16"/>
-    <rect x="14" y="4" width="4" height="16"/>
-  </svg>
-</div>
-
-  </div>
-
-  <div class="vinfo">
-    <span class="vtag">Use Case</span>
-    <h3>CSV Analysis → PDF Report</h3>
-    <p>Upload a CSV, ask for analysis, watch the agent generate charts and a formatted PDF output.</p>
-    <span class="vdur">⏱ ~8 min</span>
-  </div>
-</div>
-
-      <!-- CARD 3 -->
-      <div class="vcard">
-  <div class="vthumb">
-    
-    <video controls controlsList="nodownload" style="width:100%; height:100%; object-fit:cover;">
-      <source src="#" type="video/mp4">
-      Your browser does not support the video tag.
-    </video>
-
-     <div class="vplay">
-  <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
-    <polygon points="5,3 19,12 5,21" />
-  </svg>
-
-  <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
-    <rect x="6" y="4" width="4" height="16"/>
-    <rect x="14" y="4" width="4" height="16"/>
-  </svg>
-</div>
-
-  </div>
-
-  <div class="vinfo">
-    <span class="vtag">MCP Integration</span>
-    <h3>Connecting MCP Servers</h3>
-    <p>Add a custom MCP server as an agent tool and watch it get called live during a session.</p>
-    <span class="vdur">⏱ ~6 min</span>
-  </div>
-</div>
-
-      <!-- CARD 4 -->
-      <div class="vcard">
-  <div class="vthumb">
-    
-    <video controls controlsList="nodownload" style="width:100%; height:100%; object-fit:cover;">
-      <source src="https://ezinsights.ai/ezinsights_videos/EzCoworker_Skill%20Build.mp4" type="video/mp4">
-      Your browser does not support the video tag.
-    </video>
-
-    <div class="vplay">
-  <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
-    <polygon points="5,3 19,12 5,21" />
-  </svg>
-
-  <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
-    <rect x="6" y="4" width="4" height="16"/>
-    <rect x="14" y="4" width="4" height="16"/>
-  </svg>
-</div>
-
-  </div>
-
-  <div class="vinfo">
-    <span class="vtag">Skills System</span>
-    <h3>Building Custom Skills</h3>
-    <p>Create a SKILL.md, assign it to a user, and see how it shapes agent behavior in real-time.</p>
-    <span class="vdur">⏱ ~2 min</span>
-  </div>
-</div>
-
-      <!-- CARD 5 -->
-      <div class="vcard">
-  <div class="vthumb">
-    
-    <video controls controlsList="nodownload" style="width:100%; height:100%; object-fit:cover;">
-      <source src="https://ezinsights.ai/ezinsights_videos/EzCoworker-Admin.mp4" type="video/mp4">
-      Your browser does not support the video tag.
-    </video>
-
-     <div class="vplay">
-  <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
-    <polygon points="5,3 19,12 5,21" />
-  </svg>
-
-  <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
-    <rect x="6" y="4" width="4" height="16"/>
-    <rect x="14" y="4" width="4" height="16"/>
-  </svg>
-</div>
-
-  </div>
-
-  <div class="vinfo">
-    <span class="vtag">Administration</span>
-    <h3>Admin Panel Walkthrough</h3>
-    <p>Manage users, configure models, assign skills, and monitor storage from the admin UI.</p>
-    <span class="vdur">⏱ ~6 min</span>
-  </div>
-</div>
-
-      <!-- CARD 6 -->
-      <div class="vcard">
-  <div class="vthumb">
-    
-    <video controls controlsList="nodownload" style="width:100%; height:100%; object-fit:cover;">
-      <source src="https://ezinsights.ai/ezinsights_videos/EzCoworker-Admin.mp4" type="video/mp4">
-      Your browser does not support the video tag.
-    </video>
-
-     <div class="vplay">
-  <svg class="play-icon" width="18" height="18" viewBox="0 0 24 24" fill="white">
-    <polygon points="5,3 19,12 5,21" />
-  </svg>
-
-  <svg class="pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="white" style="display:none;">
-    <rect x="6" y="4" width="4" height="16"/>
-    <rect x="14" y="4" width="4" height="16"/>
-  </svg>
-</div>
-
-  </div>
-
-  <div class="vinfo">
-    <span class="vtag">Configuration</span>
-    <h3>Multi-Provider Model Setup</h3>
-    <p>Configure Ollama local models side by side with Anthropic and OpenAI cloud models.</p>
-    <span class="vdur">⏱ ~6 min</span>
-  </div>
-</div>
-
-    </div>
-
-    <!-- media integration guide -->
-
-  </section>
+  
 
   <!-- ──────── WHY EZCOWORKER ──────── -->
   <div class="full-bleed" id="compare">
@@ -2579,14 +2668,8 @@
     <p>Deploy Community Edition free, or reach out to unlock the full Enterprise Data Intelligence &amp; SDLC suite —
       the most powerful AI agent platform available anywhere.</p>
     <div class="cta-btns">
-      <a href="https://github.com/EzinsightsInc/EzCoworker" class="btn-p" target="_blank">
-        <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24">
-          <path
-            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-        </svg>
-        ⭐ Star on GitHub
-      </a>
-      <a href="mailto:hello@ezinsights.ai" class="btn-s">
+     
+      <a href="mailto:sales@ezinsights.ai" class="btn-s">
         Contact for Enterprise →
       </a>
     </div>
@@ -2612,20 +2695,65 @@
       <a href="mailto:sales@ezinsights.ai">Contact</a>
     </div>
   </footer>
-<script>
-  const videos = document.querySelectorAll("video");
+
+  <div class="video-overlay"></div>
+
+<div class="video-modal" id="videoModal">
+  <span class="close-btn">&times;</span>
+  <video id="modalVideo" controls>
+    <source src="" type="video/mp4">
+  </video>
+</div>
+
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+
+
+  <script>
+document.addEventListener("DOMContentLoaded", function () {
+
+  const videos = document.querySelectorAll('.vthumb video');
+  const modal = document.getElementById('videoModal');
+  const modalVideo = document.getElementById('modalVideo');
+  const overlay = document.querySelector('.video-overlay');
+  const closeBtn = document.querySelector('.close-btn');
 
   videos.forEach(video => {
-    video.addEventListener("play", () => {
+    video.addEventListener('click', () => {
+
+      // Pause all card videos
       videos.forEach(v => {
-        if (v !== video) {
-          v.pause();
-        }
+        v.pause();
+        v.currentTime = 0;
       });
+
+      const source = video.querySelector('source').src;
+
+      modalVideo.querySelector('source').src = source;
+      modalVideo.load();
+
+      modal.classList.add('active');
+      overlay.classList.add('active');
+
+      modalVideo.play();
     });
   });
+
+  function closeModal() {
+    modal.classList.remove('active');
+    overlay.classList.remove('active');
+
+    modalVideo.pause();
+    modalVideo.currentTime = 0;
+  }
+
+  // ✅ CLOSE EVENTS (fixed)
+  if (overlay) overlay.addEventListener('click', closeModal);
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+});
 </script>
-  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+
+
   <script>
 const cards = document.querySelectorAll(".vcard");
 const allVideos = document.querySelectorAll("video");
